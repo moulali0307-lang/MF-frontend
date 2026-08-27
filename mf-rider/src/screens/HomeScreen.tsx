@@ -17,6 +17,12 @@ interface HomeScreenProps {
   onBookRide: () => void;
   onMoreServices?: () => void;
   onMenu?: () => void;
+
+  // More Services navigation
+  onBus?: () => void;
+  onTrain?: () => void;
+  onMovies?: () => void;
+  onRecharge?: () => void;
 }
 
 const COLORS = {
@@ -50,6 +56,10 @@ export function HomeScreen({
   onBookRide,
   onMoreServices,
   onMenu,
+  onBus,
+  onTrain,
+  onMovies,
+  onRecharge,
 }: HomeScreenProps) {
   const { user } = useAuth();
 
@@ -112,14 +122,6 @@ export function HomeScreen({
     user?.fullName ||
     user?.email?.split("@")[0] ||
     "MF Rider";
-
-  const openService = (service: string) => {
-    console.log(`Opening ${service} service`);
-
-    // Temporary service action.
-    // Later we will connect these to real booking screens/APIs.
-    alert(`${service} booking will open here.`);
-  };
 
   return (
     <View style={styles.screen}>
@@ -614,7 +616,7 @@ export function HomeScreen({
             {/* BUS */}
 
             <Pressable
-              onPress={() => openService("Bus Tickets")}
+              onPress={onBus}
               style={{
                 width: "48%",
                 minHeight: 95,
@@ -643,7 +645,7 @@ export function HomeScreen({
             {/* TRAIN */}
 
             <Pressable
-              onPress={() => openService("Train Tickets")}
+              onPress={onTrain}
               style={{
                 width: "48%",
                 minHeight: 95,
@@ -672,7 +674,7 @@ export function HomeScreen({
             {/* MOVIES */}
 
             <Pressable
-              onPress={() => openService("Movie Tickets")}
+              onPress={onMovies}
               style={{
                 width: "48%",
                 minHeight: 95,
@@ -701,7 +703,7 @@ export function HomeScreen({
             {/* RECHARGE */}
 
             <Pressable
-              onPress={() => openService("Recharge")}
+              onPress={onRecharge}
               style={{
                 width: "48%",
                 minHeight: 95,

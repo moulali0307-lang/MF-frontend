@@ -18,6 +18,9 @@ import { WelcomeScreen } from "./src/screens/WelcomeScreen";
 import { MoreServicesScreen } from "./src/screens/MoreServicesScreen";
 import { BusBookingScreen } from "./src/screens/BusBookingScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
+import { TrainBookingScreen } from "./src/screens/TrainBookingScreen";
+import { MovieBookingScreen } from "./src/screens/MovieBookingScreen";
+import { RechargeScreen } from "./src/screens/RechargeScreen";
 
 import { colors } from "./src/theme/colors";
 
@@ -31,6 +34,9 @@ type AppScreen =
   | "bookRide"
   | "moreServices"
   | "busBooking"
+  | "trainBooking"
+  | "movieBooking"
+  | "recharge"
   | "profile";
 
 function RootNavigator() {
@@ -88,31 +94,31 @@ function RootNavigator() {
     }
 
     /*
-     * MORE SERVICES
-     */
-    if (
-      appScreen === "moreServices"
-    ) {
-      return (
-        <MoreServicesScreen
-          onBack={() =>
-            setAppScreen("home")
-          }
-          onBus={() =>
-            setAppScreen("busBooking")
-          }
-          onTrain={() =>
-            console.log("Train Tickets")
-          }
-          onMovies={() =>
-            console.log("Movie Tickets")
-          }
-          onRecharge={() =>
-            console.log("Recharge")
-          }
-        />
-      );
-    }
+      * MORE SERVICES
+      */
+      if (appScreen === "moreServices") {
+        return (
+          <MoreServicesScreen
+            onBack={() => setAppScreen("home")}
+
+            onBus={() =>
+              setAppScreen("busBooking")
+            }
+
+            onTrain={() =>
+              setAppScreen("trainBooking")
+            }
+
+            onMovies={() =>
+              setAppScreen("movieBooking")
+            }
+
+            onRecharge={() =>
+              setAppScreen("recharge")
+            }
+          />
+        );
+      }
 
     /*
      * BUS BOOKING
@@ -143,26 +149,78 @@ function RootNavigator() {
         />
       );
     }
+    /*
+     * TRAIN BOOKING
+     */
+    if (appScreen === "trainBooking") {
+      return (
+         <TrainBookingScreen
+           onBack={() =>
+            setAppScreen("moreServices")
+          }
+        />
+      );
+    }
+    /*
+     * MOVIE BOOKING
+     */
+     if (appScreen === "movieBooking") {
+        return (
+          <MovieBookingScreen
+            onBack={() =>
+              setAppScreen("moreServices")
+            }
+          />
+        );
+      }
 
+      /*
+      * RECHARGE
+      */
+      if (appScreen === "recharge") {
+        return (
+          <RechargeScreen
+            onBack={() =>
+              setAppScreen("moreServices")
+            }
+          />
+        );
+      }
     /*
      * HOME
      */
     return (
-      <HomeScreen
-        onBookRide={() =>
-          setAppScreen("bookRide")
-        }
+       <HomeScreen
+          onBookRide={() =>
+            setAppScreen("bookRide")
+          }
 
-        onMoreServices={() =>
-          setAppScreen("moreServices")
-        }
+          onMoreServices={() =>
+            setAppScreen("moreServices")
+          }
 
-        onMenu={() =>
-          setAppScreen("profile")
-        }
-      />
-    );
-  }
+          onMenu={() =>
+            setAppScreen("profile")
+          }
+
+          onBus={() =>
+            setAppScreen("busBooking")
+          }
+
+          onTrain={() =>
+            setAppScreen("trainBooking")
+          }
+
+          onMovies={() =>
+            setAppScreen("movieBooking")
+          }
+
+          onRecharge={() =>
+            setAppScreen("recharge")
+          }
+        />
+      );
+    }
 
   /*
    * --------------------------------------------------
