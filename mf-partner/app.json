@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "MF Partner",
+    "slug": "mf-partner",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}

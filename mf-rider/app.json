@@ -1,0 +1,9 @@
+{
+  "expo": {
+    "name": "MF Rider",
+    "slug": "mf-rider",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light"
+  }
+}
