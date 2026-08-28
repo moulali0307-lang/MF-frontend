@@ -1,9 +1,15 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   ActivityIndicator,
   Alert,
   Modal,
   Pressable,
+  SafeAreaView,
   ScrollView,
   StyleSheet,
   Text,
@@ -11,332 +17,342 @@ import {
   View,
 } from "react-native";
 
-import { useAuth } from "../context/AuthContext";
 import {
+  getLiveTrainStatus,
   searchStations,
   searchTrains,
+  type RailwayStation,
+  type RailwayTrain,
+  type LiveTrainStatus,
 } from "../api/railways";
+
+import { useAuth } from "../context/AuthContext";
 
 interface Props {
   onBack: () => void;
 }
 
-interface RailwayStation {
-  code: string;
-  name: string;
-  city?: string;
+interface CalendarProps {
+  visible: boolean;
+  selectedDate: string;
+  onClose: () => void;
+  onSelect: (date: string) => void;
 }
 
-interface Train {
-  id: string;
-  number: string;
-  name: string;
-  from: string;
-  to: string;
-  departure: string;
-  arrival: string;
-  duration: string;
-  fare: number | null;
-  availableSeats: number | null;
-  className: string;
-  raw?: any;
+function pad(value: number): string {
+  return String(value).padStart(2, "0");
 }
 
-function formatDate(
+function formatDateValue(
   year: number,
   month: number,
   day: number,
-) {
-  return `${String(day).padStart(2, "0")}/${String(
-    month + 1,
-  ).padStart(2, "0")}/${year}`;
+): string {
+  return `${year}-${pad(month + 1)}-${pad(day)}`;
 }
 
-function apiDate(date: string) {
-  const parts = date.split("/");
-
-  if (parts.length !== 3) {
+function formatDisplayDate(
+  date: string,
+): string {
+  if (!date) {
     return "";
   }
 
-  const [day, month, year] = parts;
+  const parts = date.split("-");
 
-  return `${year}-${month}-${day}`;
+  if (parts.length !== 3) {
+    return date;
+  }
+
+  return `${parts[2]}/${parts[1]}/${parts[0]}`;
+}
+
+function isPastDate(
+  year: number,
+  month: number,
+  day: number,
+): boolean {
+  const today = new Date();
+
+  const current = new Date(
+    today.getFullYear(),
+    today.getMonth(),
+    today.getDate(),
+  );
+
+  const value = new Date(
+    year,
+    month,
+    day,
+  );
+
+  return value < current;
+}
+
+function formatDuration(
+  minutes?: number,
+): string {
+  if (
+    minutes === undefined ||
+    Number.isNaN(Number(minutes)) ||
+    Number(minutes) <= 0
+  ) {
+    return "--";
+  }
+
+  const total = Math.round(
+    Number(minutes),
+  );
+
+  const hours = Math.floor(
+    total / 60,
+  );
+
+  const mins = total % 60;
+
+  if (hours === 0) {
+    return `${mins}m`;
+  }
+
+  if (mins === 0) {
+    return `${hours}h`;
+  }
+
+  return `${hours}h ${mins}m`;
+}
+
+function safeString(
+  value: unknown,
+): string {
+  if (
+    value === null ||
+    value === undefined
+  ) {
+    return "";
+  }
+
+  return String(value);
 }
 
 function normalizeStation(
-  station: RailwayStation,
+  raw: any,
 ): RailwayStation {
   return {
-    code: String(station.code || "").toUpperCase(),
-    name: String(station.name || ""),
-    city: station.city
-      ? String(station.city)
+    code: safeString(
+      raw?.code ??
+        raw?.stationCode ??
+        raw?.station?.code,
+    ).toUpperCase(),
+
+    name: safeString(
+      raw?.name ??
+        raw?.stationName ??
+        raw?.station?.name ??
+        "Station",
+    ),
+
+    city: safeString(
+      raw?.city ??
+        raw?.cityName ??
+        raw?.station?.city,
+    ),
+  };
+}
+
+function normalizeTrain(
+  raw: RailwayTrain | any,
+): RailwayTrain {
+  const train =
+    raw?.train ?? raw;
+
+  const from =
+    raw?.from ?? {};
+
+  const to =
+    raw?.to ?? {};
+
+  const live =
+    raw?.live ?? undefined;
+
+  return {
+    train: {
+      number: safeString(
+        train?.number ??
+          raw?.number,
+      ),
+
+      name: safeString(
+        train?.name ??
+          raw?.name ??
+          "Train",
+      ),
+
+      type: safeString(
+        train?.type ??
+          raw?.type,
+      ),
+
+      category: safeString(
+        train?.category ??
+          raw?.category,
+      ),
+
+      runDays: Array.isArray(
+        train?.runDays,
+      )
+        ? train.runDays
+        : [],
+    },
+
+    from: {
+      departure:
+        safeString(
+          from?.departure ??
+            raw?.departure,
+        ) || undefined,
+
+      day:
+        typeof from?.day === "number"
+          ? from.day
+          : undefined,
+
+      sequence:
+        typeof from?.sequence === "number"
+          ? from.sequence
+          : undefined,
+    },
+
+    to: {
+      arrival:
+        safeString(
+          to?.arrival ??
+            raw?.arrival,
+        ) || undefined,
+
+      day:
+        typeof to?.day === "number"
+          ? to.day
+          : undefined,
+
+      sequence:
+        typeof to?.sequence === "number"
+          ? to.sequence
+          : undefined,
+    },
+
+    distance:
+      typeof raw?.distance === "number"
+        ? raw.distance
+        : undefined,
+
+    duration:
+      typeof raw?.duration === "number"
+        ? raw.duration
+        : undefined,
+
+    totalHaltsBetween:
+      typeof raw?.totalHaltsBetween ===
+      "number"
+        ? raw.totalHaltsBetween
+        : undefined,
+
+    live: live
+      ? {
+          type: safeString(
+            live?.type,
+          ),
+
+          startDate:
+            safeString(
+              live?.startDate,
+            ) || undefined,
+
+          expectedArrivalTime:
+            live?.expectedArrivalTime ??
+            null,
+
+          expectedDepartureTime:
+            live?.expectedDepartureTime ??
+            null,
+
+          platform:
+            live?.platform ??
+            null,
+
+          delayMinutes:
+            typeof live?.delayMinutes ===
+            "number"
+              ? live.delayMinutes
+              : null,
+        }
       : undefined,
   };
 }
 
-function getTrainArray(data: any): any[] {
-  if (Array.isArray(data)) {
-    return data;
-  }
+/* -------------------------------------------------------
+   CALENDAR
+------------------------------------------------------- */
 
-  if (Array.isArray(data?.trains)) {
-    return data.trains;
-  }
-
-  if (Array.isArray(data?.data)) {
-    return data.data;
-  }
-
-  if (Array.isArray(data?.results)) {
-    return data.results;
-  }
-
-  if (Array.isArray(data?.items)) {
-    return data.items;
-  }
-
-  return [];
-}
-
-function firstValue(
-  object: any,
-  keys: string[],
-  fallback = "",
-) {
-  for (const key of keys) {
-    const value = object?.[key];
-
-    if (
-      value !== undefined &&
-      value !== null &&
-      String(value).trim() !== ""
-    ) {
-      return value;
-    }
-  }
-
-  return fallback;
-}
-
-function normalizeTrain(
-  raw: any,
-  index: number,
-  from: RailwayStation,
-  to: RailwayStation,
-): Train {
-  const number = String(
-    firstValue(
-      raw,
-      [
-        "number",
-        "trainNumber",
-        "train_no",
-        "trainNo",
-        "no",
-      ],
-      "—",
-    ),
-  );
-
-  const name = String(
-    firstValue(
-      raw,
-      [
-        "name",
-        "trainName",
-        "train_name",
-      ],
-      "Train",
-    ),
-  );
-
-  const departure = String(
-    firstValue(
-      raw,
-      [
-        "departure",
-        "departureTime",
-        "departure_time",
-        "depTime",
-        "fromTime",
-      ],
-      "—",
-    ),
-  );
-
-  const arrival = String(
-    firstValue(
-      raw,
-      [
-        "arrival",
-        "arrivalTime",
-        "arrival_time",
-        "arrTime",
-        "toTime",
-      ],
-      "—",
-    ),
-  );
-
-  const duration = String(
-    firstValue(
-      raw,
-      [
-        "duration",
-        "travelTime",
-        "travel_time",
-      ],
-      "—",
-    ),
-  );
-
-  const fareValue = firstValue(
-    raw,
-    [
-      "fare",
-      "price",
-      "ticketPrice",
-      "ticket_price",
-      "amount",
-    ],
-    null,
-  );
-
-  const seatsValue = firstValue(
-    raw,
-    [
-      "availableSeats",
-      "available_seats",
-      "seats",
-      "seatAvailability",
-      "available",
-    ],
-    null,
-  );
-
-  const className = String(
-    firstValue(
-      raw,
-      [
-        "className",
-        "class",
-        "coach",
-        "travelClass",
-      ],
-      "—",
-    ),
-  );
-
-  return {
-    id: String(
-      raw?.id ||
-        raw?.trainId ||
-        `${number}-${index}`,
-    ),
-    number,
-    name,
-    from:
-      String(
-        firstValue(
-          raw,
-          [
-            "from",
-            "fromStation",
-            "source",
-          ],
-          from.name,
-        ),
-      ),
-    to:
-      String(
-        firstValue(
-          raw,
-          [
-            "to",
-            "toStation",
-            "destination",
-          ],
-          to.name,
-        ),
-      ),
-    departure,
-    arrival,
-    duration,
-    fare:
-      fareValue === null
-        ? null
-        : Number(fareValue),
-    availableSeats:
-      seatsValue === null
-        ? null
-        : Number(seatsValue),
-    className,
-    raw,
-  };
-}
-
-function Calendar({
+function TrainCalendar({
+  visible,
   selectedDate,
-  onSelect,
   onClose,
-}: {
-  selectedDate: string;
-  onSelect: (date: string) => void;
-  onClose: () => void;
-}) {
-  const today = new Date();
+  onSelect,
+}: CalendarProps) {
+  const initialDate =
+    selectedDate
+      ? new Date(`${selectedDate}T00:00:00`)
+      : new Date();
 
-  const [month, setMonth] = useState(
-    today.getMonth(),
-  );
+  const [month, setMonth] =
+    useState(initialDate.getMonth());
 
-  const [year, setYear] = useState(
-    today.getFullYear(),
-  );
+  const [year, setYear] =
+    useState(initialDate.getFullYear());
 
-  const monthNames = [
-    "January",
-    "February",
-    "March",
-    "April",
-    "May",
-    "June",
-    "July",
-    "August",
-    "September",
-    "October",
-    "November",
-    "December",
-  ];
+  useEffect(() => {
+    if (!visible) {
+      return;
+    }
 
-  const weekDays = [
-    "Sun",
-    "Mon",
-    "Tue",
-    "Wed",
-    "Thu",
-    "Fri",
-    "Sat",
-  ];
+    const value =
+      selectedDate
+        ? new Date(
+            `${selectedDate}T00:00:00`,
+          )
+        : new Date();
 
-  const firstDay = new Date(
-    year,
-    month,
-    1,
-  ).getDay();
+    setMonth(value.getMonth());
+    setYear(value.getFullYear());
+  }, [
+    visible,
+    selectedDate,
+  ]);
 
-  const daysInMonth = new Date(
-    year,
-    month + 1,
-    0,
-  ).getDate();
+  const daysInMonth =
+    new Date(
+      year,
+      month + 1,
+      0,
+    ).getDate();
 
-  const days: (number | null)[] = [];
+  const firstDay =
+    new Date(
+      year,
+      month,
+      1,
+    ).getDay();
 
-  for (let i = 0; i < firstDay; i++) {
-    days.push(null);
+  const cells: Array<
+    number | null
+  > = [];
+
+  for (
+    let i = 0;
+    i < firstDay;
+    i++
+  ) {
+    cells.push(null);
   }
 
   for (
@@ -344,184 +360,183 @@ function Calendar({
     day <= daysInMonth;
     day++
   ) {
-    days.push(day);
+    cells.push(day);
   }
 
   function previousMonth() {
-    if (
-      year === today.getFullYear() &&
-      month === today.getMonth()
-    ) {
+    if (month === 0) {
+      setMonth(11);
+      setYear((value) => value - 1);
       return;
     }
 
-    if (month === 0) {
-      setMonth(11);
-      setYear(year - 1);
-    } else {
-      setMonth(month - 1);
-    }
+    setMonth((value) => value - 1);
   }
 
   function nextMonth() {
     if (month === 11) {
       setMonth(0);
-      setYear(year + 1);
-    } else {
-      setMonth(month + 1);
+      setYear((value) => value + 1);
+      return;
     }
+
+    setMonth((value) => value + 1);
   }
 
-  function isPastDate(day: number) {
-    const selected = new Date(
+  const monthName =
+    new Date(
       year,
       month,
-      day,
+      1,
+    ).toLocaleString(
+      "en-IN",
+      {
+        month: "long",
+      },
     );
-
-    const startOfToday = new Date(
-      today.getFullYear(),
-      today.getMonth(),
-      today.getDate(),
-    );
-
-    return selected < startOfToday;
-  }
 
   return (
     <Modal
-      visible
+      visible={visible}
       transparent
       animationType="fade"
       onRequestClose={onClose}
     >
-      <View style={styles.modalOverlay}>
+      <View style={styles.modalBackdrop}>
         <View style={styles.calendarCard}>
-          <View style={styles.calendarHeader}>
-            <View>
-              <Text style={styles.calendarTitle}>
-                Select travel date
-              </Text>
-
-              <Text style={styles.calendarSub}>
-                Choose your journey date
-              </Text>
-            </View>
-
-            <Pressable
-              onPress={onClose}
-              style={styles.closeButton}
-            >
-              <Text style={styles.closeText}>
-                ×
-              </Text>
-            </Pressable>
-          </View>
-
-          <View style={styles.monthRow}>
+          <View
+            style={styles.calendarHeader}
+          >
             <Pressable
               onPress={previousMonth}
               style={styles.monthButton}
             >
-              <Text style={styles.monthArrow}>
+              <Text
+                style={
+                  styles.monthButtonText
+                }
+              >
                 ‹
               </Text>
             </Pressable>
 
-            <Text style={styles.monthTitle}>
-              {monthNames[month]} {year}
+            <Text
+              style={styles.calendarTitle}
+            >
+              {monthName} {year}
             </Text>
 
             <Pressable
               onPress={nextMonth}
               style={styles.monthButton}
             >
-              <Text style={styles.monthArrow}>
+              <Text
+                style={
+                  styles.monthButtonText
+                }
+              >
                 ›
               </Text>
             </Pressable>
           </View>
 
-          <View style={styles.weekRow}>
-            {weekDays.map((day) => (
+          <View
+            style={styles.weekRow}
+          >
+            {[
+              "Sun",
+              "Mon",
+              "Tue",
+              "Wed",
+              "Thu",
+              "Fri",
+              "Sat",
+            ].map((day) => (
               <Text
                 key={day}
-                style={styles.weekDay}
+                style={styles.weekText}
               >
                 {day}
               </Text>
             ))}
           </View>
 
-          <View style={styles.daysGrid}>
-            {days.map((day, index) => {
-              if (day === null) {
+          <View
+            style={styles.calendarGrid}
+          >
+            {cells.map(
+              (day, index) => {
+                if (day === null) {
+                  return (
+                    <View
+                      key={`empty-${index}`}
+                      style={
+                        styles.dayCell
+                      }
+                    />
+                  );
+                }
+
+                const value =
+                  formatDateValue(
+                    year,
+                    month,
+                    day,
+                  );
+
+                const selected =
+                  value ===
+                  selectedDate;
+
+                const disabled =
+                  isPastDate(
+                    year,
+                    month,
+                    day,
+                  );
+
                 return (
-                  <View
-                    key={`empty-${index}`}
-                    style={styles.dayCell}
-                  />
-                );
-              }
-
-              const dateValue =
-                formatDate(
-                  year,
-                  month,
-                  day,
-                );
-
-              const isSelected =
-                selectedDate === dateValue;
-
-              const isToday =
-                today.getDate() === day &&
-                today.getMonth() === month &&
-                today.getFullYear() === year;
-
-              const disabled =
-                isPastDate(day);
-
-              return (
-                <Pressable
-                  key={dateValue}
-                  disabled={disabled}
-                  onPress={() => {
-                    onSelect(dateValue);
-                    onClose();
-                  }}
-                  style={[
-                    styles.dayCell,
-                    isSelected &&
-                      styles.selectedDay,
-                    disabled &&
-                      styles.disabledDay,
-                  ]}
-                >
-                  <Text
+                  <Pressable
+                    key={value}
+                    disabled={disabled}
+                    onPress={() => {
+                      onSelect(value);
+                      onClose();
+                    }}
                     style={[
-                      styles.dayText,
-                      isSelected &&
-                        styles.selectedDayText,
-                      isToday &&
-                        !isSelected &&
-                        styles.todayText,
+                      styles.dayCell,
+                      selected &&
+                        styles.selectedDay,
                       disabled &&
-                        styles.disabledDayText,
+                        styles.disabledDay,
                     ]}
                   >
-                    {day}
-                  </Text>
-                </Pressable>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.dayText,
+                        selected &&
+                          styles.selectedDayText,
+                        disabled &&
+                          styles.disabledDayText,
+                      ]}
+                    >
+                      {day}
+                    </Text>
+                  </Pressable>
+                );
+              },
+            )}
           </View>
 
           <Pressable
             onPress={onClose}
             style={styles.calendarCancel}
           >
-            <Text style={styles.calendarCancelText}>
+            <Text
+              style={
+                styles.calendarCancelText
+              }
+            >
               Cancel
             </Text>
           </Pressable>
@@ -530,6 +545,10 @@ function Calendar({
     </Modal>
   );
 }
+
+/* -------------------------------------------------------
+   MAIN SCREEN
+------------------------------------------------------- */
 
 export function TrainBookingScreen({
   onBack,
@@ -543,61 +562,106 @@ export function TrainBookingScreen({
     useState("");
 
   const [fromStation, setFromStation] =
-    useState<RailwayStation | null>(null);
+    useState<RailwayStation | null>(
+      null,
+    );
 
   const [toStation, setToStation] =
-    useState<RailwayStation | null>(null);
+    useState<RailwayStation | null>(
+      null,
+    );
 
-  const [fromSuggestions, setFromSuggestions] =
-    useState<RailwayStation[]>([]);
+  const [
+    fromSuggestions,
+    setFromSuggestions,
+  ] = useState<RailwayStation[]>(
+    [],
+  );
 
-  const [toSuggestions, setToSuggestions] =
-    useState<RailwayStation[]>([]);
+  const [
+    toSuggestions,
+    setToSuggestions,
+  ] = useState<RailwayStation[]>(
+    [],
+  );
 
-  const [loadingFromStations, setLoadingFromStations] =
-    useState(false);
+  const [
+    loadingFromStations,
+    setLoadingFromStations,
+  ] = useState(false);
 
-  const [loadingToStations, setLoadingToStations] =
-    useState(false);
+  const [
+    loadingToStations,
+    setLoadingToStations,
+  ] = useState(false);
 
   const [date, setDate] =
     useState("");
 
-  const [calendarVisible, setCalendarVisible] =
-    useState(false);
+  const [
+    calendarVisible,
+    setCalendarVisible,
+  ] = useState(false);
 
   const [searched, setSearched] =
     useState(false);
 
-  const [loadingTrains, setLoadingTrains] =
-    useState(false);
+  const [
+    loadingTrains,
+    setLoadingTrains,
+  ] = useState(false);
 
-  const [availableTrains, setAvailableTrains] =
-    useState<Train[]>([]);
+  const [
+    availableTrains,
+    setAvailableTrains,
+  ] = useState<RailwayTrain[]>(
+    [],
+  );
 
-  const [selectedTrain, setSelectedTrain] =
-    useState<Train | null>(null);
+  const [
+    selectedTrain,
+    setSelectedTrain,
+  ] = useState<RailwayTrain | null>(
+    null,
+  );
 
-  const [errorMessage, setErrorMessage] =
-    useState("");
+  const [
+    loadingLive,
+    setLoadingLive,
+  ] = useState(false);
 
-  const [showFromSuggestions, setShowFromSuggestions] =
-    useState(false);
+  const [
+    liveStatus,
+    setLiveStatus,
+  ] = useState<LiveTrainStatus | null>(
+    null,
+  );
 
-  const [showToSuggestions, setShowToSuggestions] =
-    useState(false);
+  const [
+    errorMessage,
+    setErrorMessage,
+  ] = useState("");
 
-  /*
-   * ---------------------------------------------
-   * FROM STATION SEARCH
-   * ---------------------------------------------
-   */
+  const [
+    showFromSuggestions,
+    setShowFromSuggestions,
+  ] = useState(false);
+
+  const [
+    showToSuggestions,
+    setShowToSuggestions,
+  ] = useState(false);
+
+  /* -----------------------------------------------------
+     FROM STATION SEARCH
+  ----------------------------------------------------- */
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadStations() {
-      const query = fromQuery.trim();
+      const query =
+        fromQuery.trim();
 
       if (
         query.length < 2 ||
@@ -637,8 +701,10 @@ export function TrainBookingScreen({
           normalized,
         );
 
-        setShowFromSuggestions(true);
-      } catch (error: any) {
+        setShowFromSuggestions(
+          true,
+        );
+      } catch (error) {
         if (!cancelled) {
           setFromSuggestions([]);
         }
@@ -649,7 +715,9 @@ export function TrainBookingScreen({
         );
       } finally {
         if (!cancelled) {
-          setLoadingFromStations(false);
+          setLoadingFromStations(
+            false,
+          );
         }
       }
     }
@@ -670,17 +738,16 @@ export function TrainBookingScreen({
     token,
   ]);
 
-  /*
-   * ---------------------------------------------
-   * TO STATION SEARCH
-   * ---------------------------------------------
-   */
+  /* -----------------------------------------------------
+     TO STATION SEARCH
+  ----------------------------------------------------- */
 
   useEffect(() => {
     let cancelled = false;
 
     async function loadStations() {
-      const query = toQuery.trim();
+      const query =
+        toQuery.trim();
 
       if (
         query.length < 2 ||
@@ -720,8 +787,10 @@ export function TrainBookingScreen({
           normalized,
         );
 
-        setShowToSuggestions(true);
-      } catch (error: any) {
+        setShowToSuggestions(
+          true,
+        );
+      } catch (error) {
         if (!cancelled) {
           setToSuggestions([]);
         }
@@ -732,7 +801,9 @@ export function TrainBookingScreen({
         );
       } finally {
         if (!cancelled) {
-          setLoadingToStations(false);
+          setLoadingToStations(
+            false,
+          );
         }
       }
     }
@@ -753,84 +824,101 @@ export function TrainBookingScreen({
     token,
   ]);
 
-  /*
-   * ---------------------------------------------
-   * SELECT FROM STATION
-   * ---------------------------------------------
-   */
+  /* -----------------------------------------------------
+     SELECT STATIONS
+  ----------------------------------------------------- */
 
   function selectFromStation(
     station: RailwayStation,
   ) {
     setFromStation(station);
+
     setFromQuery(
       `${station.name} (${station.code})`,
     );
+
     setFromSuggestions([]);
-    setShowFromSuggestions(false);
+
+    setShowFromSuggestions(
+      false,
+    );
+
     setSearched(false);
     setAvailableTrains([]);
     setSelectedTrain(null);
+    setLiveStatus(null);
+    setErrorMessage("");
   }
-
-  /*
-   * ---------------------------------------------
-   * SELECT TO STATION
-   * ---------------------------------------------
-   */
 
   function selectToStation(
     station: RailwayStation,
   ) {
     setToStation(station);
+
     setToQuery(
       `${station.name} (${station.code})`,
     );
+
     setToSuggestions([]);
+
     setShowToSuggestions(false);
+
     setSearched(false);
     setAvailableTrains([]);
     setSelectedTrain(null);
+    setLiveStatus(null);
+    setErrorMessage("");
   }
 
-  /*
-   * ---------------------------------------------
-   * SWAP
-   * ---------------------------------------------
-   */
-
   function swapStations() {
-    const oldFromStation =
+    const oldFrom =
       fromStation;
 
     const oldFromQuery =
       fromQuery;
 
     setFromStation(toStation);
-    setToStation(oldFromStation);
+    setToStation(oldFrom);
 
     setFromQuery(toQuery);
     setToQuery(oldFromQuery);
 
     setFromSuggestions([]);
     setToSuggestions([]);
+
     setShowFromSuggestions(false);
     setShowToSuggestions(false);
 
     setSearched(false);
     setAvailableTrains([]);
     setSelectedTrain(null);
+    setLiveStatus(null);
+    setErrorMessage("");
   }
 
-  /*
-   * ---------------------------------------------
-   * SEARCH REAL TRAINS
-   * ---------------------------------------------
-   */
+  /* -----------------------------------------------------
+     DATE
+  ----------------------------------------------------- */
+
+  function selectDate(
+    value: string,
+  ) {
+    setDate(value);
+    setSearched(false);
+    setAvailableTrains([]);
+    setSelectedTrain(null);
+    setLiveStatus(null);
+    setErrorMessage("");
+  }
+
+  /* -----------------------------------------------------
+     REAL TRAIN SEARCH
+  ----------------------------------------------------- */
 
   async function handleSearchTrains() {
     setErrorMessage("");
     setSelectedTrain(null);
+    setLiveStatus(null);
     setAvailableTrains([]);
     setSearched(false);
 
@@ -845,9 +933,11 @@ export function TrainBookingScreen({
       setErrorMessage(
         "Please select a departure station from the suggestions.",
       );
+
       setShowFromSuggestions(
         fromSuggestions.length > 0,
       );
+
       return;
     }
 
@@ -855,15 +945,17 @@ export function TrainBookingScreen({
       setErrorMessage(
         "Please select a destination station from the suggestions.",
       );
+
       setShowToSuggestions(
         toSuggestions.length > 0,
       );
+
       return;
     }
 
     if (
-      fromStation.code ===
-      toStation.code
+      fromStation.code.toUpperCase() ===
+      toStation.code.toUpperCase()
     ) {
       setErrorMessage(
         "Departure and destination stations cannot be the same.",
@@ -883,30 +975,35 @@ export function TrainBookingScreen({
         await searchTrains(
           fromStation.code,
           toStation.code,
-          apiDate(date),
-          token ?? undefined
+          date,
+          token,
         );
 
       const rawTrains =
-        getTrainArray(result);
+        Array.isArray(
+          result?.trains,
+        )
+          ? result.trains
+          : [];
 
       const trains =
-        rawTrains.map(
-          (train, index) =>
-            normalizeTrain(
-              train,
-              index,
-              fromStation,
-              toStation,
-            ),
-        );
+        rawTrains
+          .map(normalizeTrain)
+          .filter(
+            (train) =>
+              train.train.number &&
+              train.train.name,
+          );
 
-      setAvailableTrains(trains);
+      setAvailableTrains(
+        trains,
+      );
+
       setSearched(true);
 
       if (trains.length === 0) {
         setErrorMessage(
-          "No trains are available for this route and date.",
+          "No trains were returned for this route and date.",
         );
       }
     } catch (error: any) {
@@ -919,151 +1016,329 @@ export function TrainBookingScreen({
 
       setErrorMessage(
         error?.message ||
-          "Unable to search trains right now. Please try again.",
+          "Unable to load trains. Please try again.",
       );
     } finally {
       setLoadingTrains(false);
     }
   }
 
-  /*
-   * ---------------------------------------------
-   * BOOK
-   * ---------------------------------------------
-   */
+  /* -----------------------------------------------------
+     LIVE TRAIN STATUS
+  ----------------------------------------------------- */
 
-  function selectTrain(train: Train) {
-    setSelectedTrain(train);
-  }
-
-  function confirmBooking() {
-    if (!selectedTrain) {
+  async function handleLiveStatus(
+    train: RailwayTrain,
+  ) {
+    if (!token) {
+      Alert.alert(
+        "Login required",
+        "Please login again.",
+      );
       return;
     }
 
-    /*
-     * IMPORTANT:
-     *
-     * We are NOT showing a fake
-     * "will open here" popup.
-     *
-     * The real passenger/payment/booking API
-     * needs to be connected here.
-     */
+    const number =
+      train.train.number;
+
+    if (!number) {
+      Alert.alert(
+        "Live status",
+        "Train number is unavailable.",
+      );
+      return;
+    }
+
+    setSelectedTrain(train);
+    setLiveStatus(null);
+    setLoadingLive(true);
+
+    try {
+      const result =
+        await getLiveTrainStatus(
+          number,
+          date,
+          token,
+        );
+
+      setLiveStatus(result);
+    } catch (error: any) {
+      console.log(
+        "LIVE TRAIN STATUS ERROR:",
+        error,
+      );
+
+      Alert.alert(
+        "Live status unavailable",
+        error?.message ||
+          "Live train status is currently unavailable.",
+      );
+    } finally {
+      setLoadingLive(false);
+    }
+  }
+
+  /* -----------------------------------------------------
+     BOOKING
+  ----------------------------------------------------- */
+
+  function handleSelectTrain(
+    train: RailwayTrain,
+  ) {
+    setSelectedTrain(train);
 
     Alert.alert(
-      "Train Selected",
-      `${selectedTrain.name} (${selectedTrain.number}) is selected.\n\n${fromStation?.name} → ${toStation?.name}\nDate: ${date}`,
+      train.train.name ||
+        "Train selected",
+      `${train.train.number}\n${train.from?.departure || "--"} → ${train.to?.arrival || "--"}\n\nActual railway ticket booking/payment requires an authorized booking integration.`,
     );
   }
 
-  const routeLabel = useMemo(() => {
-    if (
-      fromStation &&
-      toStation
-    ) {
-      return `${fromStation.name} → ${toStation.name}`;
+  /* -----------------------------------------------------
+     HELPERS
+  ----------------------------------------------------- */
+
+  const resultText =
+    useMemo(() => {
+      if (!searched) {
+        return "";
+      }
+
+      if (
+        availableTrains.length === 0
+      ) {
+        return "No trains found";
+      }
+
+      return `${availableTrains.length} train${
+        availableTrains.length === 1
+          ? ""
+          : "s"
+      } found`;
+    }, [
+      searched,
+      availableTrains.length,
+    ]);
+
+  function renderLiveSummary() {
+    if (!liveStatus) {
+      return null;
     }
 
-    return "Select your journey";
-  }, [
-    fromStation,
-    toStation,
-  ]);
+    return (
+      <View
+        style={styles.livePanel}
+      >
+        <View
+          style={
+            styles.liveHeader
+          }
+        >
+          <Text
+            style={
+              styles.liveTitle
+            }
+          >
+            Live Running Status
+          </Text>
+
+          <Pressable
+            onPress={() => {
+              setLiveStatus(null);
+            }}
+          >
+            <Text
+              style={
+                styles.closeLiveText
+              }
+            >
+              Close
+            </Text>
+          </Pressable>
+        </View>
+
+        <Text
+          style={styles.liveTrainName}
+        >
+          {liveStatus.trainName ||
+            selectedTrain?.train.name ||
+            "Train"}
+        </Text>
+
+        <Text
+          style={styles.liveNumber}
+        >
+          {liveStatus.trainNumber ||
+            selectedTrain?.train.number ||
+            ""}
+        </Text>
+
+        {liveStatus.status ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Status:{" "}
+            {liveStatus.status}
+          </Text>
+        ) : null}
+
+        {liveStatus.delayMinutes !==
+        undefined ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Delay:{" "}
+            {liveStatus.delayMinutes}{" "}
+            min
+          </Text>
+        ) : null}
+
+        {liveStatus.currentLocation
+          ?.stationCode ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Current:{" "}
+            {
+              liveStatus
+                .currentLocation
+                .stationCode
+            }
+          </Text>
+        ) : null}
+
+        {liveStatus.nextHalt
+          ?.stationName ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Next:{" "}
+            {
+              liveStatus.nextHalt
+                .stationName
+            }
+          </Text>
+        ) : null}
+
+        {liveStatus.nextHalt
+          ?.distance !==
+        undefined ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Distance:{" "}
+            {
+              liveStatus.nextHalt
+                .distance
+            }{" "}
+            km
+          </Text>
+        ) : null}
+
+        {liveStatus.currentLocation
+          ?.speedKmh !==
+        undefined ? (
+          <Text
+            style={styles.liveRow}
+          >
+            Speed:{" "}
+            {
+              liveStatus
+                .currentLocation
+                .speedKmh
+            }{" "}
+            km/h
+          </Text>
+        ) : null}
+
+        {liveStatus.currentLocation
+          ?.isHalt ? (
+          <Text
+            style={styles.haltText}
+          >
+            Currently halted at a
+            station
+          </Text>
+        ) : null}
+      </View>
+    );
+  }
 
   return (
-    <View style={styles.screen}>
-      {calendarVisible && (
-        <Calendar
-          selectedDate={date}
-          onSelect={(selected) => {
-            setDate(selected);
-            setSearched(false);
-            setAvailableTrains([]);
-            setSelectedTrain(null);
-            setErrorMessage("");
-          }}
-          onClose={() =>
-            setCalendarVisible(false)
-          }
-        />
-      )}
-
-      <ScrollView
-        showsVerticalScrollIndicator={false}
-        keyboardShouldPersistTaps="handled"
-        contentContainerStyle={
-          styles.container
-        }
+    <SafeAreaView
+      style={styles.safeArea}
+    >
+      <View
+        style={styles.container}
       >
         {/* HEADER */}
 
-        <View style={styles.header}>
+        <View
+          style={styles.header}
+        >
           <Pressable
             onPress={onBack}
             style={styles.backButton}
           >
-            <Text style={styles.backText}>
-              ←
+            <Text
+              style={styles.backText}
+            >
+              ‹
             </Text>
           </Pressable>
 
-          <View style={{ flex: 1 }}>
-            <Text style={styles.headerTitle}>
-              Train Tickets
+          <View>
+            <Text
+              style={styles.headerTitle}
+            >
+              Train Booking
             </Text>
 
-            <Text style={styles.headerSub}>
-              Search and book available trains
-            </Text>
-          </View>
-
-          <View style={styles.headerBadge}>
-            <Text style={styles.headerBadgeText}>
-              MF
+            <Text
+              style={styles.headerSubtitle}
+            >
+              Search real trains
             </Text>
           </View>
         </View>
 
-        {/* HERO */}
+        <ScrollView
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={
+            false
+          }
+          contentContainerStyle={
+            styles.scrollContent
+          }
+        >
+          {/* SEARCH CARD */}
 
-        <View style={styles.hero}>
-          <View style={styles.heroIcon}>
-            <Text style={styles.heroEmoji}>
-              🚆
-            </Text>
-          </View>
-
-          <View style={{ flex: 1 }}>
-            <Text style={styles.heroTitle}>
+          <View
+            style={styles.searchCard}
+          >
+            <Text
+              style={
+                styles.sectionTitle
+              }
+            >
               Where are you travelling?
             </Text>
 
-            <Text style={styles.heroText}>
-              Search any Indian railway station,
-              choose your date and find available
-              trains.
-            </Text>
-          </View>
-        </View>
+            {/* FROM */}
 
-        {/* SEARCH CARD */}
-
-        <View style={styles.searchCard}>
-          <Text style={styles.sectionLabel}>
-            SEARCH TRAINS
-          </Text>
-
-          {/* FROM */}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>
-              FROM
+            <Text
+              style={styles.label}
+            >
+              From station
             </Text>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIcon}>
-                📍
+            <View
+              style={styles.inputRow}
+            >
+              <Text
+                style={styles.inputIcon}
+              >
+                🚉
               </Text>
 
               <TextInput
@@ -1072,10 +1347,16 @@ export function TrainBookingScreen({
                   setFromQuery(value);
                   setFromStation(null);
                   setSearched(false);
-                  setAvailableTrains([]);
-                  setSelectedTrain(null);
+                  setAvailableTrains(
+                    [],
+                  );
                   setErrorMessage("");
                 }}
+                placeholder="Search departure station"
+                placeholderTextColor="#999"
+                style={styles.input}
+                autoCorrect={false}
+                autoCapitalize="words"
                 onFocus={() => {
                   if (
                     fromSuggestions.length
@@ -1085,114 +1366,88 @@ export function TrainBookingScreen({
                     );
                   }
                 }}
-                placeholder="Search departure station"
-                placeholderTextColor="#8A8F9F"
-                style={styles.input}
-                autoCapitalize="words"
-                autoCorrect={false}
-                underlineColorAndroid="transparent"
               />
 
-              {loadingFromStations && (
+              {loadingFromStations ? (
                 <ActivityIndicator
                   size="small"
-                  color="#E7A400"
                 />
-              )}
+              ) : null}
             </View>
 
             {showFromSuggestions &&
-              fromSuggestions.length > 0 && (
-                <View style={styles.suggestionsCard}>
-                  {fromSuggestions.map(
-                    (station) => (
-                      <Pressable
-                        key={station.code}
-                        onPress={() =>
-                          selectFromStation(
-                            station,
-                          )
-                        }
+            fromSuggestions.length >
+              0 ? (
+              <View
+                style={
+                  styles.suggestionBox
+                }
+              >
+                {fromSuggestions.map(
+                  (station) => (
+                    <Pressable
+                      key={`${station.code}-${station.name}`}
+                      onPress={() =>
+                        selectFromStation(
+                          station,
+                        )
+                      }
+                      style={
+                        styles.suggestion
+                      }
+                    >
+                      <Text
                         style={
-                          styles.suggestionItem
+                          styles.suggestionName
                         }
                       >
-                        <View
-                          style={
-                            styles.stationPin
-                          }
-                        >
-                          <Text>
-                            🚉
-                          </Text>
-                        </View>
+                        {station.name}
+                      </Text>
 
-                        <View
-                          style={{
-                            flex: 1,
-                          }}
-                        >
-                          <Text
-                            style={
-                              styles.suggestionName
-                            }
-                          >
-                            {station.name}
-                          </Text>
+                      <Text
+                        style={
+                          styles.suggestionCode
+                        }
+                      >
+                        {station.code}
+                        {station.city
+                          ? ` • ${station.city}`
+                          : ""}
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
+              </View>
+            ) : null}
 
-                          <Text
-                            style={
-                              styles.suggestionMeta
-                            }
-                          >
-                            {station.code}
-                            {station.city
-                              ? ` • ${station.city}`
-                              : ""}
-                          </Text>
-                        </View>
-
-                        <Text
-                          style={
-                            styles.suggestionArrow
-                          }
-                        >
-                          →
-                        </Text>
-                      </Pressable>
-                    ),
-                  )}
-                </View>
-              )}
-          </View>
-
-          {/* SWAP */}
-
-          <View style={styles.swapRow}>
-            <View style={styles.line} />
+            {/* SWAP */}
 
             <Pressable
               onPress={swapStations}
               style={styles.swapButton}
             >
-              <Text style={styles.swapText}>
+              <Text
+                style={styles.swapText}
+              >
                 ⇅
               </Text>
             </Pressable>
 
-            <View style={styles.line} />
-          </View>
+            {/* TO */}
 
-          {/* TO */}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>
-              TO
+            <Text
+              style={styles.label}
+            >
+              To station
             </Text>
 
-            <View style={styles.inputWrapper}>
-              <Text style={styles.inputIcon}>
-                📍
+            <View
+              style={styles.inputRow}
+            >
+              <Text
+                style={styles.inputIcon}
+              >
+                🎯
               </Text>
 
               <TextInput
@@ -1201,10 +1456,16 @@ export function TrainBookingScreen({
                   setToQuery(value);
                   setToStation(null);
                   setSearched(false);
-                  setAvailableTrains([]);
-                  setSelectedTrain(null);
+                  setAvailableTrains(
+                    [],
+                  );
                   setErrorMessage("");
                 }}
+                placeholder="Search destination station"
+                placeholderTextColor="#999"
+                style={styles.input}
+                autoCorrect={false}
+                autoCapitalize="words"
                 onFocus={() => {
                   if (
                     toSuggestions.length
@@ -1214,101 +1475,79 @@ export function TrainBookingScreen({
                     );
                   }
                 }}
-                placeholder="Search destination station"
-                placeholderTextColor="#8A8F9F"
-                style={styles.input}
-                autoCapitalize="words"
-                autoCorrect={false}
-                underlineColorAndroid="transparent"
               />
 
-              {loadingToStations && (
+              {loadingToStations ? (
                 <ActivityIndicator
                   size="small"
-                  color="#E7A400"
                 />
-              )}
+              ) : null}
             </View>
 
             {showToSuggestions &&
-              toSuggestions.length > 0 && (
-                <View style={styles.suggestionsCard}>
-                  {toSuggestions.map(
-                    (station) => (
-                      <Pressable
-                        key={station.code}
-                        onPress={() =>
-                          selectToStation(
-                            station,
-                          )
-                        }
+            toSuggestions.length >
+              0 ? (
+              <View
+                style={
+                  styles.suggestionBox
+                }
+              >
+                {toSuggestions.map(
+                  (station) => (
+                    <Pressable
+                      key={`${station.code}-${station.name}`}
+                      onPress={() =>
+                        selectToStation(
+                          station,
+                        )
+                      }
+                      style={
+                        styles.suggestion
+                      }
+                    >
+                      <Text
                         style={
-                          styles.suggestionItem
+                          styles.suggestionName
                         }
                       >
-                        <View
-                          style={
-                            styles.stationPin
-                          }
-                        >
-                          <Text>
-                            🚉
-                          </Text>
-                        </View>
+                        {station.name}
+                      </Text>
 
-                        <View
-                          style={{
-                            flex: 1,
-                          }}
-                        >
-                          <Text
-                            style={
-                              styles.suggestionName
-                            }
-                          >
-                            {station.name}
-                          </Text>
+                      <Text
+                        style={
+                          styles.suggestionCode
+                        }
+                      >
+                        {station.code}
+                        {station.city
+                          ? ` • ${station.city}`
+                          : ""}
+                      </Text>
+                    </Pressable>
+                  ),
+                )}
+              </View>
+            ) : null}
 
-                          <Text
-                            style={
-                              styles.suggestionMeta
-                            }
-                          >
-                            {station.code}
-                            {station.city
-                              ? ` • ${station.city}`
-                              : ""}
-                          </Text>
-                        </View>
+            {/* DATE */}
 
-                        <Text
-                          style={
-                            styles.suggestionArrow
-                          }
-                        >
-                          →
-                        </Text>
-                      </Pressable>
-                    ),
-                  )}
-                </View>
-              )}
-          </View>
-
-          {/* DATE */}
-
-          <View style={styles.field}>
-            <Text style={styles.label}>
-              TRAVEL DATE
+            <Text
+              style={styles.label}
+            >
+              Journey date
             </Text>
 
             <Pressable
               onPress={() =>
-                setCalendarVisible(true)
+                setCalendarVisible(
+                  true,
+                )
               }
               style={styles.dateButton}
             >
-              <Text style={styles.inputIcon}>
+              <Text
+                style={styles.dateIcon}
+              >
                 📅
               </Text>
 
@@ -1316,1556 +1555,1154 @@ export function TrainBookingScreen({
                 style={[
                   styles.dateText,
                   !date &&
-                    styles.datePlaceholder,
+                    styles.placeholderText,
                 ]}
               >
-                {date ||
-                  "Select travel date"}
-              </Text>
-
-              <Text style={styles.calendarArrow}>
-                ›
+                {date
+                  ? formatDisplayDate(
+                      date,
+                    )
+                  : "Select journey date"}
               </Text>
             </Pressable>
-          </View>
 
-          {/* ERROR */}
+            {/* ERROR */}
 
-          {!!errorMessage && (
-            <View style={styles.errorBox}>
-              <Text style={styles.errorIcon}>
-                !
-              </Text>
-
-              <Text style={styles.errorText}>
-                {errorMessage}
-              </Text>
-            </View>
-          )}
-
-          {/* SEARCH BUTTON */}
-
-          <Pressable
-            disabled={loadingTrains}
-            onPress={handleSearchTrains}
-            style={({ pressed }) => [
-              styles.searchButton,
-              pressed &&
-                !loadingTrains &&
-                styles.buttonPressed,
-              loadingTrains &&
-                styles.disabledButton,
-            ]}
-          >
-            {loadingTrains ? (
-              <>
-                <ActivityIndicator
-                  color="#FFFFFF"
-                />
-
-                <Text
-                  style={
-                    styles.searchButtonText
-                  }
-                >
-                  Searching trains...
-                </Text>
-
-                <View style={{ width: 20 }} />
-              </>
-            ) : (
-              <>
-                <Text
-                  style={
-                    styles.searchButtonText
-                  }
-                >
-                  Search Available Trains
-                </Text>
-
-                <Text style={styles.searchArrow}>
-                  →
-                </Text>
-              </>
-            )}
-          </Pressable>
-        </View>
-
-        {/* ROUTE SUMMARY */}
-
-        {fromStation &&
-          toStation && (
-            <View style={styles.routeSummary}>
-              <View>
-                <Text style={styles.routeSummaryLabel}>
-                  JOURNEY
-                </Text>
-
-                <Text style={styles.routeSummaryTitle}>
-                  {routeLabel}
-                </Text>
-              </View>
-
-              <View style={styles.codePill}>
-                <Text style={styles.codePillText}>
-                  {fromStation.code}
-                </Text>
-
-                <Text style={styles.codeArrow}>
-                  →
-                </Text>
-
-                <Text style={styles.codePillText}>
-                  {toStation.code}
-                </Text>
-              </View>
-            </View>
-          )}
-
-        {/* RESULTS */}
-
-        {searched && (
-          <View style={styles.resultsSection}>
-            <View style={styles.resultsHeader}>
-              <View style={{ flex: 1 }}>
-                <Text style={styles.resultsTitle}>
-                  Available Trains
-                </Text>
-
-                <Text style={styles.routeText}>
-                  {routeLabel}
-                </Text>
-
-                <Text
-                  style={styles.dateTextSmall}
-                >
-                  Travel date: {date}
-                </Text>
-              </View>
-
-              <View style={styles.countCircle}>
-                <Text style={styles.countText}>
-                  {availableTrains.length}
-                </Text>
-              </View>
-            </View>
-
-            {availableTrains.map(
-              (train) => (
-                <View
-                  key={train.id}
-                  style={[
-                    styles.trainCard,
-                    selectedTrain?.id ===
-                      train.id &&
-                      styles.selectedTrainCard,
-                  ]}
-                >
-                  <View style={styles.trainTop}>
-                    <View
-                      style={
-                        styles.trainIconBox
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.trainIcon
-                        }
-                      >
-                        🚆
-                      </Text>
-                    </View>
-
-                    <View
-                      style={{ flex: 1 }}
-                    >
-                      <Text
-                        style={
-                          styles.trainName
-                        }
-                        numberOfLines={2}
-                      >
-                        {train.name}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.trainNumber
-                        }
-                      >
-                        Train No. {train.number}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.priceBox}
-                    >
-                      <Text
-                        style={
-                          styles.priceLabel
-                        }
-                      >
-                        FARE
-                      </Text>
-
-                      <Text
-                        style={styles.price}
-                      >
-                        {train.fare !== null
-                          ? `₹${train.fare}`
-                          : "—"}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.journey}>
-                    <View
-                      style={styles.station}
-                    >
-                      <Text
-                        style={styles.time}
-                      >
-                        {train.departure}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.stationName
-                        }
-                        numberOfLines={1}
-                      >
-                        {train.from}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={
-                        styles.journeyMiddle
-                      }
-                    >
-                      <Text
-                        style={
-                          styles.duration
-                        }
-                      >
-                        {train.duration}
-                      </Text>
-
-                      <View
-                        style={
-                          styles.routeLine
-                        }
-                      >
-                        <View
-                          style={styles.dot}
-                        />
-
-                        <View
-                          style={
-                            styles.routeLineInner
-                          }
-                        />
-
-                        <View
-                          style={styles.dot}
-                        />
-                      </View>
-                    </View>
-
-                    <View
-                      style={[
-                        styles.station,
-                        {
-                          alignItems:
-                            "flex-end",
-                        },
-                      ]}
-                    >
-                      <Text
-                        style={styles.time}
-                      >
-                        {train.arrival}
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.stationName
-                        }
-                        numberOfLines={1}
-                      >
-                        {train.to}
-                      </Text>
-                    </View>
-                  </View>
-
-                  <View
-                    style={styles.detailsRow}
-                  >
-                    <View
-                      style={styles.detailItem}
-                    >
-                      <Text
-                        style={
-                          styles.detailLabel
-                        }
-                      >
-                        CLASS
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.detailValue
-                        }
-                      >
-                        {train.className}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.detailItem}
-                    >
-                      <Text
-                        style={
-                          styles.detailLabel
-                        }
-                      >
-                        SEATS
-                      </Text>
-
-                      <Text
-                        style={[
-                          styles.detailValue,
-                          train.availableSeats !==
-                            null &&
-                            train.availableSeats <=
-                              10 &&
-                            styles.lowSeats,
-                        ]}
-                      >
-                        {train.availableSeats !==
-                        null
-                          ? train.availableSeats
-                          : "Check"}
-                      </Text>
-                    </View>
-
-                    <View
-                      style={styles.detailItem}
-                    >
-                      <Text
-                        style={
-                          styles.detailLabel
-                        }
-                      >
-                        STATUS
-                      </Text>
-
-                      <Text
-                        style={
-                          styles.available
-                        }
-                      >
-                        AVAILABLE
-                      </Text>
-                    </View>
-                  </View>
-
-                  <Pressable
-                    onPress={() =>
-                      selectTrain(train)
-                    }
-                    style={({ pressed }) => [
-                      styles.bookButton,
-                      pressed &&
-                        styles.buttonPressed,
-                    ]}
-                  >
-                    <Text
-                      style={
-                        styles.bookButtonText
-                      }
-                    >
-                      Select & Book Train
-                    </Text>
-
-                    <Text
-                      style={styles.bookArrow}
-                    >
-                      →
-                    </Text>
-                  </Pressable>
-                </View>
-              ),
-            )}
-
-            {/* NO RESULTS */}
-
-            {availableTrains.length ===
-              0 && (
+            {errorMessage ? (
               <View
-                style={styles.emptyCard}
-              >
-                <Text
-                  style={styles.emptyIcon}
-                >
-                  🚆
-                </Text>
-
-                <Text
-                  style={styles.emptyTitle}
-                >
-                  No trains found
-                </Text>
-
-                <Text
-                  style={styles.emptyText}
-                >
-                  There are no trains returned
-                  by the railway service for
-                  this route and date.
-                </Text>
-
-                <Text
-                  style={styles.emptyHint}
-                >
-                  Try another station or travel
-                  date.
-                </Text>
-              </View>
-            )}
-          </View>
-        )}
-
-        {/* BOOKING PANEL */}
-
-        {selectedTrain && (
-          <View style={styles.bookingPanel}>
-            <View
-              style={
-                styles.bookingPanelHeader
-              }
-            >
-              <View
-                style={{ flex: 1 }}
-              >
-                <Text
-                  style={styles.bookingLabel}
-                >
-                  SELECTED TRAIN
-                </Text>
-
-                <Text
-                  style={styles.bookingTitle}
-                >
-                  {selectedTrain.name}
-                </Text>
-
-                <Text
-                  style={styles.bookingTrainNumber}
-                >
-                  Train No.{" "}
-                  {selectedTrain.number}
-                </Text>
-              </View>
-
-              <Pressable
-                onPress={() =>
-                  setSelectedTrain(null)
+                style={
+                  styles.errorBox
                 }
               >
                 <Text
-                  style={styles.removeText}
-                >
-                  ×
-                </Text>
-              </Pressable>
-            </View>
-
-            <View
-              style={styles.bookingRoute}
-            >
-              <View>
-                <Text
-                  style={styles.bookingTime}
-                >
-                  {selectedTrain.departure}
-                </Text>
-
-                <Text
                   style={
-                    styles.bookingStation
+                    styles.errorText
                   }
                 >
-                  {fromStation?.name}
-                </Text>
-
-                <Text
-                  style={
-                    styles.bookingCode
-                  }
-                >
-                  {fromStation?.code}
+                  {errorMessage}
                 </Text>
               </View>
+            ) : null}
 
-              <Text
-                style={styles.bookingArrow}
-              >
-                →
-              </Text>
-
-              <View
-                style={{
-                  alignItems:
-                    "flex-end",
-                }}
-              >
-                <Text
-                  style={styles.bookingTime}
-                >
-                  {selectedTrain.arrival}
-                </Text>
-
-                <Text
-                  style={
-                    styles.bookingStation
-                  }
-                >
-                  {toStation?.name}
-                </Text>
-
-                <Text
-                  style={
-                    styles.bookingCode
-                  }
-                >
-                  {toStation?.code}
-                </Text>
-              </View>
-            </View>
-
-            <View
-              style={styles.bookingSummary}
-            >
-              <View>
-                <Text
-                  style={styles.summaryText}
-                >
-                  Travel date
-                </Text>
-
-                <Text
-                  style={styles.summaryValue}
-                >
-                  {date}
-                </Text>
-              </View>
-
-              <View
-                style={{
-                  alignItems:
-                    "flex-end",
-                }}
-              >
-                <Text
-                  style={styles.summaryText}
-                >
-                  Fare
-                </Text>
-
-                <Text
-                  style={styles.summaryValue}
-                >
-                  {selectedTrain.fare !==
-                  null
-                    ? `₹${selectedTrain.fare}`
-                    : "Check"}
-                </Text>
-              </View>
-            </View>
+            {/* SEARCH */}
 
             <Pressable
-              onPress={confirmBooking}
-              style={styles.confirmButton}
+              onPress={handleSearchTrains}
+              disabled={loadingTrains}
+              style={[
+                styles.searchButton,
+                loadingTrains &&
+                  styles.disabledButton,
+              ]}
             >
-              <Text
-                style={styles.confirmText}
-              >
-                Continue to Passenger Details
-              </Text>
-
-              <Text
-                style={styles.confirmArrow}
-              >
-                →
-              </Text>
+              {loadingTrains ? (
+                <ActivityIndicator
+                  color="#fff"
+                />
+              ) : (
+                <Text
+                  style={
+                    styles.searchButtonText
+                  }
+                >
+                  Search Trains
+                </Text>
+              )}
             </Pressable>
           </View>
-        )}
 
-        {/* INFO */}
+          {/* RESULTS */}
 
-        <View style={styles.infoCard}>
-          <View style={styles.infoIcon}>
-            <Text
-              style={styles.infoIconText}
+          {searched ? (
+            <View
+              style={
+                styles.resultsSection
+              }
             >
-              MF
-            </Text>
-          </View>
+              <View
+                style={
+                  styles.resultsHeader
+                }
+              >
+                <View>
+                  <Text
+                    style={
+                      styles.resultsTitle
+                    }
+                  >
+                    Available Trains
+                  </Text>
 
-          <View style={{ flex: 1 }}>
-            <Text
-              style={styles.infoTitle}
-            >
-              Easy train booking
-            </Text>
+                  <Text
+                    style={
+                      styles.routeText
+                    }
+                  >
+                    {fromStation?.code} →
+                    {" "}
+                    {toStation?.code}
+                  </Text>
+                </View>
 
-            <Text
-              style={styles.infoText}
+                <Text
+                  style={
+                    styles.countText
+                  }
+                >
+                  {resultText}
+                </Text>
+              </View>
+
+              {loadingTrains ? (
+                <View
+                  style={
+                    styles.centerBox
+                  }
+                >
+                  <ActivityIndicator />
+                  <Text
+                    style={
+                      styles.loadingText
+                    }
+                  >
+                    Finding trains...
+                  </Text>
+                </View>
+              ) : null}
+
+              {!loadingTrains &&
+              availableTrains.length ===
+                0 ? (
+                <View
+                  style={
+                    styles.emptyCard
+                  }
+                >
+                  <Text
+                    style={
+                      styles.emptyIcon
+                    }
+                  >
+                    🚆
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.emptyTitle
+                    }
+                  >
+                    No trains found
+                  </Text>
+
+                  <Text
+                    style={
+                      styles.emptyText
+                    }
+                  >
+                    No train services were
+                    returned for this route
+                    and journey date.
+                  </Text>
+                </View>
+              ) : null}
+
+              {availableTrains.map(
+                (train, index) => {
+                  const number =
+                    train.train.number;
+
+                  const name =
+                    train.train.name;
+
+                  const delay =
+                    train.live
+                      ?.delayMinutes ??
+                    0;
+
+                  const platform =
+                    train.live
+                      ?.platform;
+
+                  return (
+                    <View
+                      key={`${number}-${index}`}
+                      style={[
+                        styles.trainCard,
+                        selectedTrain
+                          ?.train
+                          .number ===
+                          number &&
+                          styles.selectedTrainCard,
+                      ]}
+                    >
+                      <View
+                        style={
+                          styles.trainTop
+                        }
+                      >
+                        <View
+                          style={
+                            styles.trainIdentity
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.trainName
+                            }
+                          >
+                            {name}
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.trainNumber
+                            }
+                          >
+                            {number}
+                          </Text>
+                        </View>
+
+                        {train.train
+                          .category ? (
+                          <View
+                            style={
+                              styles.categoryBadge
+                            }
+                          >
+                            <Text
+                              style={
+                                styles.categoryText
+                              }
+                            >
+                              {
+                                train
+                                  .train
+                                  .category
+                              }
+                            </Text>
+                          </View>
+                        ) : null}
+                      </View>
+
+                      <View
+                        style={
+                          styles.timeRow
+                        }
+                      >
+                        <View
+                          style={
+                            styles.timeBlock
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.timeText
+                            }
+                          >
+                            {train.from
+                              ?.departure ||
+                              "--"}
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.stationSmall
+                            }
+                          >
+                            {fromStation?.code ||
+                              "FROM"}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={
+                            styles.durationBlock
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.durationText
+                            }
+                          >
+                            {formatDuration(
+                              train.duration,
+                            )}
+                          </Text>
+
+                          <View
+                            style={
+                              styles.line
+                            }
+                          />
+
+                          <Text
+                            style={
+                              styles.distanceText
+                            }
+                          >
+                            {train.distance
+                              ? `${Math.round(
+                                  train.distance,
+                                )} km`
+                              : ""}
+                          </Text>
+                        </View>
+
+                        <View
+                          style={[
+                            styles.timeBlock,
+                            styles.arrivalBlock,
+                          ]}
+                        >
+                          <Text
+                            style={
+                              styles.timeText
+                            }
+                          >
+                            {train.to
+                              ?.arrival ||
+                              "--"}
+                          </Text>
+
+                          <Text
+                            style={
+                              styles.stationSmall
+                            }
+                          >
+                            {toStation?.code ||
+                              "TO"}
+                          </Text>
+                        </View>
+                      </View>
+
+                      <View
+                        style={
+                          styles.infoRow
+                        }
+                      >
+                        <Text
+                          style={
+                            styles.infoText
+                          }
+                        >
+                          {train.train
+                            .type ||
+                            "Express"}
+                        </Text>
+
+                        {train
+                          .totalHaltsBetween !==
+                        undefined ? (
+                          <Text
+                            style={
+                              styles.infoText
+                            }
+                          >
+                            {
+                              train
+                                .totalHaltsBetween
+                            }{" "}
+                            stops
+                          </Text>
+                        ) : null}
+
+                        {delay > 0 ? (
+                          <Text
+                            style={
+                              styles.delayText
+                            }
+                          >
+                            {delay} min delay
+                          </Text>
+                        ) : (
+                          <Text
+                            style={
+                              styles.onTimeText
+                            }
+                          >
+                            Live / On time
+                          </Text>
+                        )}
+
+                        {platform ? (
+                          <Text
+                            style={
+                              styles.infoText
+                            }
+                          >
+                            PF {platform}
+                          </Text>
+                        ) : null}
+                      </View>
+
+                      <View
+                        style={
+                          styles.actionRow
+                        }
+                      >
+                        <Pressable
+                          onPress={() =>
+                            handleLiveStatus(
+                              train,
+                            )
+                          }
+                          style={
+                            styles.liveButton
+                          }
+                        >
+                          {loadingLive &&
+                          selectedTrain
+                            ?.train
+                            .number ===
+                            number ? (
+                            <ActivityIndicator
+                              size="small"
+                            />
+                          ) : (
+                            <Text
+                              style={
+                                styles.liveButtonText
+                              }
+                            >
+                              Live Status
+                            </Text>
+                          )}
+                        </Pressable>
+
+                        <Pressable
+                          onPress={() =>
+                            handleSelectTrain(
+                              train,
+                            )
+                          }
+                          style={
+                            styles.selectButton
+                          }
+                        >
+                          <Text
+                            style={
+                              styles.selectButtonText
+                            }
+                          >
+                            Select Train
+                          </Text>
+                        </Pressable>
+                      </View>
+                    </View>
+                  );
+                },
+              )}
+
+              {renderLiveSummary()}
+            </View>
+          ) : null}
+
+          {/* BOOKING NOTE */}
+
+          {selectedTrain ? (
+            <View
+              style={
+                styles.bookingInfo
+              }
             >
-              Search any available railway
-              station, select your journey date,
-              compare trains and choose your
-              preferred train.
-            </Text>
-          </View>
-        </View>
-      </ScrollView>
-    </View>
+              <Text
+                style={
+                  styles.bookingInfoTitle
+                }
+              >
+                Selected Train
+              </Text>
+
+              <Text
+                style={
+                  styles.bookingInfoTrain
+                }
+              >
+                {
+                  selectedTrain.train
+                    .name
+                }
+              </Text>
+
+              <Text
+                style={
+                  styles.bookingInfoNumber
+                }
+              >
+                {
+                  selectedTrain.train
+                    .number
+                }
+              </Text>
+
+              <Text
+                style={
+                  styles.bookingInfoText
+                }
+              >
+                Actual ticket availability,
+                fare, payment and railway
+                ticket issuance must be
+                connected to an authorized
+                railway booking provider.
+              </Text>
+            </View>
+          ) : null}
+        </ScrollView>
+
+        <TrainCalendar
+          visible={calendarVisible}
+          selectedDate={date}
+          onClose={() =>
+            setCalendarVisible(
+              false,
+            )
+          }
+          onSelect={selectDate}
+        />
+      </View>
+    </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F8F6F1",
-  },
-
-  container: {
-    padding: 22,
-    paddingBottom: 60,
-  },
-
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 22,
-  },
-
-  backButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E4DED3",
-    marginRight: 14,
-  },
-
-  backText: {
-    fontSize: 26,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  headerTitle: {
-    fontSize: 23,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  headerSub: {
-    marginTop: 3,
-    fontSize: 12,
-    color: "#73798B",
-  },
-
-  headerBadge: {
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: "#FFF0C9",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E7A400",
-  },
-
-  headerBadgeText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#D79500",
-  },
-
-  hero: {
-    flexDirection: "row",
-    alignItems: "center",
-    padding: 20,
-    borderRadius: 22,
-    backgroundColor: "#EAF0FF",
-    marginBottom: 18,
-  },
-
-  heroIcon: {
-    width: 58,
-    height: 58,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 15,
-  },
-
-  heroEmoji: {
-    fontSize: 32,
-  },
-
-  heroTitle: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  heroText: {
-    marginTop: 5,
-    fontSize: 12,
-    lineHeight: 18,
-    color: "#73798B",
-  },
-
-  searchCard: {
-    padding: 17,
-    borderRadius: 22,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E4DED3",
-  },
-
-  sectionLabel: {
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    color: "#D79500",
-    marginBottom: 15,
-  },
-
-  field: {
-    marginBottom: 12,
-  },
-
-  label: {
-    marginBottom: 6,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.1,
-    color: "#555B6E",
-  },
-
-  inputWrapper: {
-    minHeight: 55,
-    borderRadius: 14,
-    backgroundColor: "#FCFBF8",
-    borderWidth: 1,
-    borderColor: "#DDD7CC",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-  },
-
-  inputIcon: {
-    fontSize: 19,
-    marginRight: 10,
-  },
-
-  input: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "700",
-    color: "#152238",
-    outlineStyle: "none" as any,
-    outlineWidth: 0,
-    borderWidth: 0,
-  },
-
-  suggestionsCard: {
-    marginTop: 6,
-    borderRadius: 15,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-    overflow: "hidden",
-  },
-
-  suggestionItem: {
-    minHeight: 64,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-    flexDirection: "row",
-    alignItems: "center",
-    borderBottomWidth: 1,
-    borderBottomColor: "#F0ECE5",
-  },
-
-  stationPin: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    backgroundColor: "#EAF0FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-  },
-
-  suggestionName: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  suggestionMeta: {
-    marginTop: 3,
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#858A98",
-  },
-
-  suggestionArrow: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#D79500",
-    marginLeft: 8,
-  },
-
-  swapRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  line: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#E5DED2",
-  },
-
-  swapButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#FFF1C9",
-    borderWidth: 1,
-    borderColor: "#F0C65D",
-    alignItems: "center",
-    justifyContent: "center",
-    marginHorizontal: 10,
-  },
-
-  swapText: {
-    fontSize: 20,
-    fontWeight: "900",
-    color: "#D79500",
-  },
-
-  dateButton: {
-    minHeight: 55,
-    borderRadius: 14,
-    backgroundColor: "#FCFBF8",
-    borderWidth: 1,
-    borderColor: "#DDD7CC",
-    flexDirection: "row",
-    alignItems: "center",
-    paddingHorizontal: 14,
-  },
-
-  dateText: {
-    flex: 1,
-    fontSize: 14,
-    fontWeight: "800",
-    color: "#152238",
-  },
-
-  datePlaceholder: {
-    color: "#8A8F9F",
-  },
-
-  calendarArrow: {
-    fontSize: 24,
-    fontWeight: "700",
-    color: "#D79500",
-  },
-
-  errorBox: {
-    marginBottom: 12,
-    padding: 12,
-    borderRadius: 13,
-    backgroundColor: "#FFF0F0",
-    borderWidth: 1,
-    borderColor: "#F2C7C7",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  errorIcon: {
-    width: 22,
-    height: 22,
-    borderRadius: 11,
-    backgroundColor: "#D94A4A",
-    color: "#FFFFFF",
-    textAlign: "center",
-    fontSize: 13,
-    fontWeight: "900",
-    marginRight: 9,
-  },
-
-  errorText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 16,
-    color: "#A63838",
-    fontWeight: "700",
-  },
-
-  searchButton: {
-    minHeight: 54,
-    marginTop: 4,
-    borderRadius: 14,
-    backgroundColor: "#E7A400",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 17,
-  },
-
-  disabledButton: {
-    opacity: 0.65,
-  },
-
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  searchArrow: {
-    color: "#FFFFFF",
-    fontSize: 23,
-    fontWeight: "900",
-  },
-
-  buttonPressed: {
-    opacity: 0.8,
-    transform: [{ scale: 0.99 }],
-  },
-
-  routeSummary: {
-    marginTop: 16,
-    padding: 15,
-    borderRadius: 18,
-    backgroundColor: "#171C2B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  routeSummaryLabel: {
-    fontSize: 8,
-    fontWeight: "900",
-    letterSpacing: 1,
-    color: "#E7A400",
-  },
-
-  routeSummaryTitle: {
-    marginTop: 4,
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#FFFFFF",
-    maxWidth: 220,
-  },
-
-  codePill: {
-    paddingHorizontal: 10,
-    paddingVertical: 8,
-    borderRadius: 12,
-    backgroundColor: "#23293A",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  codePillText: {
-    color: "#FFFFFF",
-    fontSize: 10,
-    fontWeight: "900",
-  },
-
-  codeArrow: {
-    color: "#E7A400",
-    marginHorizontal: 5,
-    fontWeight: "900",
-  },
-
-  resultsSection: {
-    marginTop: 24,
-  },
-
-  resultsHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 12,
-  },
-
-  resultsTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  routeText: {
-    marginTop: 3,
-    fontSize: 12,
-    color: "#70768A",
-    fontWeight: "700",
-  },
-
-  dateTextSmall: {
-    marginTop: 3,
-    fontSize: 11,
-    color: "#9297A5",
-  },
-
-  countCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    backgroundColor: "#FFF0C9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  countText: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#D79500",
-  },
-
-  trainCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    padding: 16,
-    marginBottom: 13,
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-  },
-
-  selectedTrainCard: {
-    borderColor: "#E7A400",
-    borderWidth: 2,
-  },
-
-  trainTop: {
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  trainIconBox: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#EAF0FF",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 12,
-  },
-
-  trainIcon: {
-    fontSize: 25,
-  },
-
-  trainName: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  trainNumber: {
-    marginTop: 3,
-    fontSize: 11,
-    color: "#7C8190",
-    fontWeight: "600",
-  },
-
-  priceBox: {
-    alignItems: "flex-end",
-  },
-
-  priceLabel: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#999EA9",
-    letterSpacing: 0.8,
-  },
-
-  price: {
-    marginTop: 2,
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  journey: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 19,
-  },
-
-  station: {
-    flex: 1,
-  },
-
-  time: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  stationName: {
-    marginTop: 4,
-    fontSize: 11,
-    color: "#777D8D",
-    fontWeight: "700",
-  },
-
-  journeyMiddle: {
-    flex: 1.5,
-    alignItems: "center",
-    paddingHorizontal: 10,
-  },
-
-  duration: {
-    fontSize: 9,
-    color: "#8B909D",
-    marginBottom: 5,
-    fontWeight: "700",
-  },
-
-  routeLine: {
-    width: "100%",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  dot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: "#E7A400",
-  },
-
-  routeLineInner: {
-    flex: 1,
-    height: 1,
-    backgroundColor: "#DED8CD",
-  },
-
-  detailsRow: {
-    flexDirection: "row",
-    borderTopWidth: 1,
-    borderTopColor: "#EEE9E1",
-    marginTop: 17,
-    paddingTop: 13,
-  },
-
-  detailItem: {
-    flex: 1,
-  },
-
-  detailLabel: {
-    fontSize: 8,
-    fontWeight: "900",
-    color: "#999EA9",
-    letterSpacing: 0.7,
-  },
-
-  detailValue: {
-    marginTop: 3,
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#152238",
-  },
-
-  lowSeats: {
-    color: "#D96B00",
-  },
-
-  available: {
-    marginTop: 3,
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#0A9B68",
-  },
-
-  bookButton: {
-    minHeight: 47,
-    marginTop: 15,
-    borderRadius: 13,
-    backgroundColor: "#E7A400",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    paddingHorizontal: 15,
-  },
-
-  bookButtonText: {
-    color: "#FFFFFF",
-    fontSize: 13,
-    fontWeight: "900",
-  },
-
-  bookArrow: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-
-  emptyCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 20,
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-    padding: 35,
-    alignItems: "center",
-  },
-
-  emptyIcon: {
-    fontSize: 42,
-    marginBottom: 10,
-  },
-
-  emptyTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  emptyText: {
-    marginTop: 6,
-    fontSize: 12,
-    color: "#777D8D",
-    textAlign: "center",
-    lineHeight: 18,
-  },
-
-  emptyHint: {
-    marginTop: 10,
-    fontSize: 11,
-    color: "#D79500",
-    fontWeight: "800",
-    textAlign: "center",
-  },
-
-  bookingPanel: {
-    marginTop: 5,
-    padding: 18,
-    borderRadius: 20,
-    backgroundColor: "#171C2B",
-  },
-
-  bookingPanelHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "flex-start",
-  },
-
-  bookingLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.2,
-    color: "#E7A400",
-  },
-
-  bookingTitle: {
-    marginTop: 4,
-    fontSize: 18,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-
-  bookingTrainNumber: {
-    marginTop: 3,
-    fontSize: 10,
-    color: "#AEB4C2",
-  },
-
-  removeText: {
-    fontSize: 28,
-    color: "#FFFFFF",
-    fontWeight: "300",
-  },
-
-  bookingRoute: {
-    marginTop: 18,
-    padding: 15,
-    borderRadius: 15,
-    backgroundColor: "#23293A",
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  bookingTime: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#FFFFFF",
-  },
-
-  bookingStation: {
-    marginTop: 3,
-    fontSize: 10,
-    color: "#BFC4D0",
-    maxWidth: 130,
-  },
-
-  bookingCode: {
-    marginTop: 2,
-    fontSize: 9,
-    fontWeight: "900",
-    color: "#E7A400",
-  },
-
-  bookingArrow: {
-    fontSize: 20,
-    color: "#E7A400",
-  },
-
-  bookingSummary: {
-    marginTop: 14,
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  summaryText: {
-    fontSize: 10,
-    color: "#AEB4C2",
-  },
-
-  summaryValue: {
-    marginTop: 3,
-    fontSize: 12,
-    color: "#FFFFFF",
-    fontWeight: "900",
-  },
-
-  confirmButton: {
-    marginTop: 16,
-    minHeight: 48,
-    borderRadius: 13,
-    backgroundColor: "#E7A400",
-    paddingHorizontal: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  confirmText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  confirmArrow: {
-    color: "#FFFFFF",
-    fontSize: 20,
-    fontWeight: "900",
-  },
-
-  infoCard: {
-    marginTop: 20,
-    padding: 17,
-    borderRadius: 20,
-    backgroundColor: "#171C2B",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  infoIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#E7A400",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 13,
-  },
-
-  infoIconText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  infoTitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  infoText: {
-    marginTop: 4,
-    color: "#BFC4D0",
-    fontSize: 10,
-    lineHeight: 15,
-  },
-
-  modalOverlay: {
-    flex: 1,
-    backgroundColor: "rgba(0,0,0,0.45)",
-    alignItems: "center",
-    justifyContent: "center",
-    padding: 20,
-  },
-
-  calendarCard: {
-    width: "100%",
-    maxWidth: 420,
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 20,
-  },
-
-  calendarHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-  },
-
-  calendarTitle: {
-    fontSize: 19,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  calendarSub: {
-    marginTop: 4,
-    fontSize: 11,
-    color: "#7B8190",
-  },
-
-  closeButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 19,
-    backgroundColor: "#F5F2EC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  closeText: {
-    fontSize: 24,
-    color: "#152238",
-    lineHeight: 26,
-  },
-
-  monthRow: {
-    marginTop: 22,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  monthButton: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: "#FFF1C9",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  monthArrow: {
-    fontSize: 25,
-    color: "#D79500",
-    fontWeight: "700",
-  },
-
-  monthTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  weekRow: {
-    marginTop: 18,
-    flexDirection: "row",
-  },
-
-  weekDay: {
-    width: "14.285%",
-    textAlign: "center",
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#8A8F9F",
-  },
-
-  daysGrid: {
-    marginTop: 8,
-    flexDirection: "row",
-    flexWrap: "wrap",
-  },
-
-  dayCell: {
-    width: "14.285%",
-    height: 43,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  selectedDay: {
-    width: "14.285%",
-    height: 43,
-    borderRadius: 14,
-    backgroundColor: "#E7A400",
-  },
-
-  disabledDay: {
-    opacity: 0.35,
-  },
-
-  dayText: {
-    fontSize: 13,
-    fontWeight: "700",
-    color: "#152238",
-  },
-
-  selectedDayText: {
-    color: "#FFFFFF",
-    fontWeight: "900",
-  },
-
-  todayText: {
-    color: "#D79500",
-    fontWeight: "900",
-  },
-
-  disabledDayText: {
-    color: "#B7B7B7",
-  },
-
-  calendarCancel: {
-    marginTop: 14,
-    height: 45,
-    borderRadius: 13,
-    backgroundColor: "#F5F2EC",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  calendarCancelText: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#152238",
-  },
-});
+/* -------------------------------------------------------
+   STYLES
+------------------------------------------------------- */
+
+const styles =
+  StyleSheet.create({
+    safeArea: {
+      flex: 1,
+      backgroundColor: "#F5F7FA",
+    },
+
+    container: {
+      flex: 1,
+      backgroundColor: "#F5F7FA",
+    },
+
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      paddingHorizontal: 18,
+      paddingVertical: 14,
+      backgroundColor: "#FFFFFF",
+      borderBottomWidth: 1,
+      borderBottomColor: "#E7E9ED",
+    },
+
+    backButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 21,
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 10,
+    },
+
+    backText: {
+      fontSize: 36,
+      lineHeight: 38,
+      color: "#111827",
+    },
+
+    headerTitle: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    headerSubtitle: {
+      marginTop: 2,
+      fontSize: 12,
+      color: "#6B7280",
+    },
+
+    scrollContent: {
+      padding: 16,
+      paddingBottom: 40,
+    },
+
+    searchCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 18,
+      padding: 18,
+      borderWidth: 1,
+      borderColor: "#E8EBEF",
+    },
+
+    sectionTitle: {
+      fontSize: 19,
+      fontWeight: "800",
+      color: "#111827",
+      marginBottom: 18,
+    },
+
+    label: {
+      fontSize: 13,
+      fontWeight: "700",
+      color: "#374151",
+      marginBottom: 7,
+    },
+
+    inputRow: {
+      minHeight: 54,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: "#D9DDE3",
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      backgroundColor: "#FFFFFF",
+    },
+
+    inputIcon: {
+      fontSize: 20,
+      marginRight: 9,
+    },
+
+    input: {
+      flex: 1,
+      minHeight: 52,
+      fontSize: 15,
+      color: "#111827",
+    },
+
+    suggestionBox: {
+      marginTop: 5,
+      borderWidth: 1,
+      borderColor: "#E2E5EA",
+      borderRadius: 12,
+      backgroundColor: "#FFFFFF",
+      overflow: "hidden",
+    },
+
+    suggestion: {
+      paddingHorizontal: 14,
+      paddingVertical: 12,
+      borderBottomWidth: 1,
+      borderBottomColor: "#F0F1F3",
+    },
+
+    suggestionName: {
+      fontSize: 14,
+      fontWeight: "700",
+      color: "#111827",
+    },
+
+    suggestionCode: {
+      marginTop: 3,
+      fontSize: 12,
+      color: "#6B7280",
+    },
+
+    swapButton: {
+      alignSelf: "center",
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      marginVertical: -1,
+      backgroundColor: "#111827",
+      alignItems: "center",
+      justifyContent: "center",
+      zIndex: 5,
+    },
+
+    swapText: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "700",
+    },
+
+    dateButton: {
+      minHeight: 54,
+      flexDirection: "row",
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: "#D9DDE3",
+      borderRadius: 12,
+      paddingHorizontal: 12,
+      backgroundColor: "#FFFFFF",
+    },
+
+    dateIcon: {
+      fontSize: 20,
+      marginRight: 10,
+    },
+
+    dateText: {
+      fontSize: 15,
+      color: "#111827",
+    },
+
+    placeholderText: {
+      color: "#999999",
+    },
+
+    errorBox: {
+      marginTop: 12,
+      padding: 12,
+      borderRadius: 10,
+      backgroundColor: "#FEF2F2",
+      borderWidth: 1,
+      borderColor: "#FECACA",
+    },
+
+    errorText: {
+      fontSize: 13,
+      lineHeight: 19,
+      color: "#B91C1C",
+    },
+
+    searchButton: {
+      marginTop: 16,
+      minHeight: 54,
+      borderRadius: 13,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#111827",
+    },
+
+    disabledButton: {
+      opacity: 0.65,
+    },
+
+    searchButtonText: {
+      color: "#FFFFFF",
+      fontSize: 16,
+      fontWeight: "800",
+    },
+
+    resultsSection: {
+      marginTop: 20,
+    },
+
+    resultsHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-end",
+      marginBottom: 12,
+    },
+
+    resultsTitle: {
+      fontSize: 19,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    routeText: {
+      marginTop: 3,
+      fontSize: 12,
+      color: "#6B7280",
+    },
+
+    countText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#374151",
+    },
+
+    centerBox: {
+      paddingVertical: 30,
+      alignItems: "center",
+    },
+
+    loadingText: {
+      marginTop: 10,
+      color: "#6B7280",
+    },
+
+    emptyCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 16,
+      padding: 26,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: "#E8EBEF",
+    },
+
+    emptyIcon: {
+      fontSize: 42,
+      marginBottom: 10,
+    },
+
+    emptyTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    emptyText: {
+      marginTop: 6,
+      textAlign: "center",
+      lineHeight: 19,
+      fontSize: 13,
+      color: "#6B7280",
+    },
+
+    trainCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 17,
+      padding: 16,
+      marginBottom: 12,
+      borderWidth: 1,
+      borderColor: "#E4E7EB",
+    },
+
+    selectedTrainCard: {
+      borderWidth: 2,
+      borderColor: "#111827",
+    },
+
+    trainTop: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "flex-start",
+    },
+
+    trainIdentity: {
+      flex: 1,
+      paddingRight: 10,
+    },
+
+    trainName: {
+      fontSize: 16,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    trainNumber: {
+      marginTop: 3,
+      fontSize: 12,
+      color: "#6B7280",
+      fontWeight: "600",
+    },
+
+    categoryBadge: {
+      paddingHorizontal: 9,
+      paddingVertical: 5,
+      borderRadius: 7,
+      backgroundColor: "#F1F3F5",
+    },
+
+    categoryText: {
+      fontSize: 10,
+      fontWeight: "800",
+      color: "#374151",
+    },
+
+    timeRow: {
+      marginTop: 18,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    timeBlock: {
+      width: 82,
+    },
+
+    arrivalBlock: {
+      alignItems: "flex-end",
+    },
+
+    timeText: {
+      fontSize: 20,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    stationSmall: {
+      marginTop: 3,
+      fontSize: 11,
+      color: "#6B7280",
+      fontWeight: "700",
+    },
+
+    durationBlock: {
+      flex: 1,
+      alignItems: "center",
+      paddingHorizontal: 8,
+    },
+
+    durationText: {
+      fontSize: 11,
+      color: "#6B7280",
+      fontWeight: "700",
+    },
+
+    line: {
+      width: "80%",
+      height: 1,
+      marginVertical: 5,
+      backgroundColor: "#C9CDD3",
+    },
+
+    distanceText: {
+      fontSize: 10,
+      color: "#9CA3AF",
+    },
+
+    infoRow: {
+      marginTop: 15,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 7,
+    },
+
+    infoText: {
+      fontSize: 11,
+      color: "#4B5563",
+      backgroundColor: "#F3F4F6",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 6,
+    },
+
+    delayText: {
+      fontSize: 11,
+      color: "#B45309",
+      backgroundColor: "#FEF3C7",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 6,
+      fontWeight: "700",
+    },
+
+    onTimeText: {
+      fontSize: 11,
+      color: "#166534",
+      backgroundColor: "#DCFCE7",
+      paddingHorizontal: 8,
+      paddingVertical: 5,
+      borderRadius: 6,
+      fontWeight: "700",
+    },
+
+    actionRow: {
+      marginTop: 15,
+      flexDirection: "row",
+      gap: 9,
+    },
+
+    liveButton: {
+      flex: 1,
+      minHeight: 45,
+      borderRadius: 10,
+      borderWidth: 1,
+      borderColor: "#111827",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    liveButtonText: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    selectButton: {
+      flex: 1,
+      minHeight: 45,
+      borderRadius: 10,
+      backgroundColor: "#111827",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    selectButtonText: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#FFFFFF",
+    },
+
+    livePanel: {
+      marginTop: 15,
+      backgroundColor: "#F8FAFC",
+      borderRadius: 14,
+      padding: 15,
+      borderWidth: 1,
+      borderColor: "#DDE2E8",
+    },
+
+    liveHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+
+    liveTitle: {
+      fontSize: 15,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    closeLiveText: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#6B7280",
+    },
+
+    liveTrainName: {
+      marginTop: 12,
+      fontSize: 16,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    liveNumber: {
+      marginTop: 2,
+      fontSize: 12,
+      color: "#6B7280",
+    },
+
+    liveRow: {
+      marginTop: 8,
+      fontSize: 13,
+      color: "#374151",
+    },
+
+    haltText: {
+      marginTop: 10,
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#166534",
+    },
+
+    bookingInfo: {
+      marginTop: 16,
+      backgroundColor: "#FFFFFF",
+      borderRadius: 16,
+      padding: 16,
+      borderWidth: 1,
+      borderColor: "#E4E7EB",
+    },
+
+    bookingInfoTitle: {
+      fontSize: 12,
+      fontWeight: "700",
+      color: "#6B7280",
+    },
+
+    bookingInfoTrain: {
+      marginTop: 5,
+      fontSize: 17,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    bookingInfoNumber: {
+      marginTop: 2,
+      fontSize: 12,
+      color: "#6B7280",
+    },
+
+    bookingInfoText: {
+      marginTop: 12,
+      fontSize: 12,
+      lineHeight: 18,
+      color: "#6B7280",
+    },
+
+    modalBackdrop: {
+      flex: 1,
+      backgroundColor: "rgba(0,0,0,0.45)",
+      justifyContent: "center",
+      padding: 20,
+    },
+
+    calendarCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 18,
+      padding: 18,
+    },
+
+    calendarHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent: "space-between",
+    },
+
+    calendarTitle: {
+      fontSize: 17,
+      fontWeight: "800",
+      color: "#111827",
+    },
+
+    monthButton: {
+      width: 40,
+      height: 40,
+      borderRadius: 20,
+      alignItems: "center",
+      justifyContent: "center",
+      backgroundColor: "#F3F4F6",
+    },
+
+    monthButtonText: {
+      fontSize: 25,
+      color: "#111827",
+    },
+
+    weekRow: {
+      flexDirection: "row",
+      marginTop: 18,
+      marginBottom: 5,
+    },
+
+    weekText: {
+      width: "14.285%",
+      textAlign: "center",
+      fontSize: 11,
+      fontWeight: "700",
+      color: "#6B7280",
+    },
+
+    calendarGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+    },
+
+    dayCell: {
+      width: "14.285%",
+      height: 42,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 9,
+    },
+
+    dayText: {
+      fontSize: 13,
+      color: "#111827",
+    },
+
+    selectedDay: {
+      backgroundColor: "#111827",
+    },
+
+    selectedDayText: {
+      color: "#FFFFFF",
+      fontWeight: "800",
+    },
+
+    disabledDay: {
+      opacity: 0.35,
+    },
+
+    disabledDayText: {
+      color: "#9CA3AF",
+    },
+
+    calendarCancel: {
+      marginTop: 12,
+      minHeight: 45,
+      alignItems: "center",
+      justifyContent: "center",
+      borderRadius: 10,
+      backgroundColor: "#F3F4F6",
+    },
+
+    calendarCancelText: {
+      fontSize: 13,
+      fontWeight: "800",
+      color: "#374151",
+    },
+  });
