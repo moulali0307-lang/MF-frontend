@@ -630,6 +630,9 @@ export function TrainBookingScreen({
     setLoadingLive,
   ] = useState(false);
 
+  const [showLivePage, setShowLivePage] =
+    useState(false);
+
   const [
     liveStatus,
     setLiveStatus,
@@ -1030,16 +1033,9 @@ export function TrainBookingScreen({
   async function handleLiveStatus(
     train: RailwayTrain,
   ) {
-    if (!token) {
-      Alert.alert(
-        "Login required",
-        "Please login again.",
-      );
-      return;
-    }
-
-    const number =
-      train.train.number;
+    const number = String(
+      train.train.number || "",
+    ).trim();
 
     if (!number) {
       Alert.alert(
@@ -1049,11 +1045,19 @@ export function TrainBookingScreen({
       return;
     }
 
+    // Open the dedicated live-status page immediately.
     setSelectedTrain(train);
     setLiveStatus(null);
     setLoadingLive(true);
+    setShowLivePage(true);
 
     try {
+      if (!token) {
+        throw new Error(
+          "Your login session has expired. Please login again.",
+        );
+      }
+
       const result =
         await getLiveTrainStatus(
           number,
@@ -1261,6 +1265,169 @@ export function TrainBookingScreen({
           </Text>
         ) : null}
       </View>
+    );
+  }
+
+  if (showLivePage) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.container}>
+          <View style={styles.header}>
+            <Pressable
+              onPress={() => {
+                setShowLivePage(false);
+                setLiveStatus(null);
+                setLoadingLive(false);
+              }}
+              style={styles.backButton}
+              accessibilityRole="button"
+              accessibilityLabel="Back to train search"
+            >
+              <Text style={styles.backText}>‹</Text>
+            </Pressable>
+
+            <View>
+              <Text style={styles.headerTitle}>
+                Live Running Status
+              </Text>
+              <Text style={styles.headerSubtitle}>
+                Real-time train information
+              </Text>
+            </View>
+          </View>
+
+          <ScrollView
+            showsVerticalScrollIndicator={false}
+            contentContainerStyle={styles.livePageContent}
+          >
+            <View style={styles.livePageCard}>
+              <Text style={styles.livePageLabel}>
+                LIVE TRAIN STATUS
+              </Text>
+
+              <Text style={styles.livePageTrainName}>
+                {selectedTrain?.train.name || "Train"}
+              </Text>
+
+              <Text style={styles.livePageNumber}>
+                Train No. {selectedTrain?.train.number || "--"}
+              </Text>
+
+              <View style={styles.livePageRoute}>
+                <View>
+                  <Text style={styles.livePageTime}>
+                    {selectedTrain?.from?.departure || "--"}
+                  </Text>
+                  <Text style={styles.livePageStation}>
+                    {selectedTrain?.from?.stationCode || "FROM"}
+                  </Text>
+                </View>
+
+                <View style={styles.livePageLine}>
+                  <View style={styles.livePageDot} />
+                  <View style={styles.livePageRouteLine} />
+                  <View style={styles.livePageDot} />
+                </View>
+
+                <View style={styles.livePageArrival}>
+                  <Text style={styles.livePageTime}>
+                    {selectedTrain?.to?.arrival || "--"}
+                  </Text>
+                  <Text style={styles.livePageStation}>
+                    {selectedTrain?.to?.stationCode || "TO"}
+                  </Text>
+                </View>
+              </View>
+            </View>
+
+            {loadingLive ? (
+              <View style={styles.liveLoadingCard}>
+                <ActivityIndicator size="large" />
+                <Text style={styles.liveLoadingTitle}>
+                  Getting live running status...
+                </Text>
+                <Text style={styles.liveLoadingText}>
+                  Please wait while we fetch the latest train position.
+                </Text>
+              </View>
+            ) : liveStatus ? (
+              <View style={styles.liveResultCard}>
+                <View style={styles.liveResultHeader}>
+                  <Text style={styles.liveResultTitle}>
+                    Current Running Status
+                  </Text>
+                  <View style={styles.liveBadge}>
+                    <Text style={styles.liveBadgeText}>LIVE</Text>
+                  </View>
+                </View>
+
+                <Text style={styles.livePageTrainName}>
+                  {liveStatus.trainName || selectedTrain?.train.name || "Train"}
+                </Text>
+
+                <Text style={styles.liveResultRow}>
+                  Status: {liveStatus.status || "Not available"}
+                </Text>
+
+                {liveStatus.delayMinutes !== undefined ? (
+                  <Text style={styles.liveResultRow}>
+                    Delay: {liveStatus.delayMinutes} min
+                  </Text>
+                ) : null}
+
+                {liveStatus.currentLocation?.stationCode ? (
+                  <Text style={styles.liveResultRow}>
+                    Current: {liveStatus.currentLocation.stationCode}
+                  </Text>
+                ) : null}
+
+                {liveStatus.nextHalt?.stationName ? (
+                  <Text style={styles.liveResultRow}>
+                    Next: {liveStatus.nextHalt.stationName}
+                  </Text>
+                ) : null}
+
+                {liveStatus.distanceKm !== undefined ? (
+                  <Text style={styles.liveResultRow}>
+                    Distance: {liveStatus.distanceKm} km
+                  </Text>
+                ) : null}
+
+                {liveStatus.haltedAtStation ? (
+                  <Text style={styles.haltedText}>
+                    Currently halted at a station
+                  </Text>
+                ) : null}
+              </View>
+            ) : (
+              <View style={styles.liveLoadingCard}>
+                <Text style={styles.liveLoadingTitle}>
+                  Live status unavailable
+                </Text>
+                <Text style={styles.liveLoadingText}>
+                  We could not load the current running status.
+                </Text>
+              </View>
+            )}
+
+            <Pressable
+              onPress={() => {
+                setShowLivePage(false);
+                setLiveStatus(null);
+                setLoadingLive(false);
+              }}
+              style={({ pressed }) => [
+                styles.liveBackButton,
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Text style={styles.liveBackButtonText}>
+                ‹ Back to Train Search
+              </Text>
+            </Pressable>
+          </ScrollView>
+        </View>
+      </SafeAreaView>
     );
   }
 
@@ -1993,7 +2160,6 @@ export function TrainBookingScreen({
                 },
               )}
 
-              {renderLiveSummary()}
             </View>
           ) : null}
 
@@ -2603,6 +2769,163 @@ const styles =
       color: "#6B7280",
     },
 
+    livePageContent: {
+      padding: 20,
+      paddingBottom: 40,
+    },
+
+    livePageCard: {
+      backgroundColor: "#FFFFFF",
+      borderRadius: 18,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: "#E4E7EB",
+    },
+
+    livePageLabel: {
+      fontSize: 11,
+      fontWeight: "900",
+      letterSpacing: 1,
+      color: "#166534",
+    },
+
+    livePageTrainName: {
+      marginTop: 8,
+      fontSize: 22,
+      fontWeight: "900",
+      color: "#111827",
+    },
+
+    livePageNumber: {
+      marginTop: 4,
+      fontSize: 13,
+      color: "#6B7280",
+    },
+
+    livePageRoute: {
+      marginTop: 25,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    livePageTime: {
+      fontSize: 20,
+      fontWeight: "900",
+      color: "#111827",
+    },
+
+    livePageStation: {
+      marginTop: 3,
+      fontSize: 11,
+      fontWeight: "800",
+      color: "#6B7280",
+    },
+
+    livePageArrival: {
+      alignItems: "flex-end",
+    },
+
+    livePageLine: {
+      flex: 1,
+      marginHorizontal: 14,
+      alignItems: "center",
+    },
+
+    livePageDot: {
+      width: 8,
+      height: 8,
+      borderRadius: 4,
+      backgroundColor: "#111827",
+    },
+
+    livePageRouteLine: {
+      width: "100%",
+      height: 1,
+      marginVertical: 4,
+      backgroundColor: "#C9CDD3",
+    },
+
+    liveLoadingCard: {
+      marginTop: 16,
+      backgroundColor: "#FFFFFF",
+      borderRadius: 18,
+      padding: 28,
+      alignItems: "center",
+      borderWidth: 1,
+      borderColor: "#E4E7EB",
+    },
+
+    liveLoadingTitle: {
+      marginTop: 14,
+      fontSize: 16,
+      fontWeight: "900",
+      color: "#111827",
+      textAlign: "center",
+    },
+
+    liveLoadingText: {
+      marginTop: 7,
+      fontSize: 12,
+      lineHeight: 18,
+      color: "#6B7280",
+      textAlign: "center",
+    },
+
+    liveResultCard: {
+      marginTop: 16,
+      backgroundColor: "#FFFFFF",
+      borderRadius: 18,
+      padding: 20,
+      borderWidth: 1,
+      borderColor: "#E4E7EB",
+    },
+
+    liveResultHeader: {
+      flexDirection: "row",
+      justifyContent: "space-between",
+      alignItems: "center",
+    },
+
+    liveResultTitle: {
+      fontSize: 16,
+      fontWeight: "900",
+      color: "#111827",
+    },
+
+    liveBadge: {
+      paddingHorizontal: 10,
+      paddingVertical: 5,
+      borderRadius: 7,
+      backgroundColor: "#DCFCE7",
+    },
+
+    liveBadgeText: {
+      fontSize: 10,
+      fontWeight: "900",
+      color: "#166534",
+    },
+
+    liveResultRow: {
+      marginTop: 10,
+      fontSize: 13,
+      color: "#374151",
+    },
+
+    liveBackButton: {
+      marginTop: 18,
+      minHeight: 48,
+      borderRadius: 12,
+      backgroundColor: "#111827",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    liveBackButtonText: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: "#FFFFFF",
+    },
+
     modalBackdrop: {
       flex: 1,
       backgroundColor: "rgba(0,0,0,0.45)",
@@ -2670,8 +2993,18 @@ const styles =
     },
 
     dayText: {
-      fontSize: 13,
-      color: "#111827",
+       fontSize: 13,
+       fontWeight: "600",
+       color: "#111827",
+    },
+
+      selectedDayText: {
+        color: "#FFFFFF",
+        fontWeight: "800",
+    },
+
+      disabledDayText: {
+        color: "#B8BDC7",
     },
 
     selectedDay: {

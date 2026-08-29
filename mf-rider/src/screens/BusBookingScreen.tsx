@@ -1,5 +1,6 @@
 import { useMemo, useState } from "react";
 import {
+  Image,
   Pressable,
   ScrollView,
   StyleSheet,
@@ -31,6 +32,7 @@ export function BusBookingScreen({
   const [from, setFrom] = useState("Chilakaluripet");
   const [to, setTo] = useState("Hyderabad");
   const [selectedBus, setSelectedBus] = useState("MF Express");
+  const [showBusPlatform, setShowBusPlatform] = useState(false);
 
   const [paymentMethod, setPaymentMethod] =
     useState<PaymentMethod>("online");
@@ -73,6 +75,124 @@ export function BusBookingScreen({
   );
 
   const rewardCost = selectedBusData.price;
+
+  const BUS_IMAGE =
+    "https://images.unsplash.com/photo-1570125909232-eb263c188f7e?auto=format&fit=crop&w=1200&q=85";
+
+  function openBusPlatform(busId: string) {
+    setSelectedBus(busId);
+    setShowBusPlatform(true);
+  }
+
+  if (showBusPlatform) {
+    return (
+      <View style={styles.container}>
+        <ScrollView
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.platformContent}
+        >
+          <View style={styles.platformHeader}>
+            <Pressable
+              onPress={() => setShowBusPlatform(false)}
+              style={styles.platformBackButton}
+            >
+              <Text style={styles.platformBackText}>‹</Text>
+            </Pressable>
+            <View>
+              <Text style={styles.platformTitle}>Bus Platform</Text>
+              <Text style={styles.platformSub}>
+                {from} → {to}
+              </Text>
+            </View>
+          </View>
+
+          <View style={styles.busHeroCard}>
+            <Image
+              source={{ uri: BUS_IMAGE }}
+              style={styles.busHeroImage}
+              resizeMode="cover"
+            />
+            <View style={styles.liveBadge}>
+              <View style={styles.liveDot} />
+              <Text style={styles.liveBadgeText}>BUS AVAILABLE</Text>
+            </View>
+          </View>
+
+          <View style={styles.platformInfoCard}>
+            <Text style={styles.platformOperator}>
+              {selectedBusData.name}
+            </Text>
+            <Text style={styles.platformType}>
+              {selectedBusData.type}
+            </Text>
+
+            <View style={styles.platformRouteRow}>
+              <View>
+                <Text style={styles.platformLabel}>BOARDING</Text>
+                <Text style={styles.platformTime}>
+                  {selectedBusData.time}
+                </Text>
+                <Text style={styles.platformPlace}>{from}</Text>
+              </View>
+
+              <View style={styles.platformArrowBox}>
+                <Text style={styles.platformArrow}>→</Text>
+              </View>
+
+              <View style={styles.platformRight}>
+                <Text style={styles.platformLabel}>ARRIVAL</Text>
+                <Text style={styles.platformTime}>
+                  {selectedBusData.arrival}
+                </Text>
+                <Text style={styles.platformPlace}>{to}</Text>
+              </View>
+            </View>
+
+            <View style={styles.platformDivider} />
+
+            <View style={styles.platformGrid}>
+              <View>
+                <Text style={styles.platformLabel}>BUS TYPE</Text>
+                <Text style={styles.platformValue}>
+                  {selectedBusData.type}
+                </Text>
+              </View>
+              <View>
+                <Text style={styles.platformLabel}>FARE</Text>
+                <Text style={styles.platformValue}>
+                  ₹{selectedBusData.price}/seat
+                </Text>
+              </View>
+            </View>
+          </View>
+
+          <View style={styles.platformNotice}>
+            <Text style={styles.platformNoticeTitle}>
+              🚌 Boarding information
+            </Text>
+            <Text style={styles.platformNoticeText}>
+              Reach the boarding point 15 minutes before departure.
+              Platform/boarding-point details are shown when provided by
+              the bus operator.
+            </Text>
+          </View>
+
+          <Pressable
+            onPress={() => setShowBusPlatform(false)}
+            style={({ pressed }) => [
+              styles.chooseBusButton,
+              pressed && { opacity: 0.85 },
+            ]}
+          >
+            <Text style={styles.chooseBusButtonText}>
+              Choose This Bus
+            </Text>
+            <Text style={styles.chooseBusArrow}>→</Text>
+          </Pressable>
+        </ScrollView>
+      </View>
+    );
+  }
 
  function handleBooking() {
     if (paymentMethod === "rewards") {
@@ -171,14 +291,18 @@ export function BusBookingScreen({
           return (
             <Pressable
               key={bus.id}
-              onPress={() => setSelectedBus(bus.id)}
+              onPress={() => openBusPlatform(bus.id)}
               style={[
                 styles.busCard,
                 selected && styles.busCardSelected,
               ]}
             >
               <View style={styles.busIcon}>
-                <Text style={styles.busEmoji}>🚌</Text>
+                <Image
+                  source={{ uri: BUS_IMAGE }}
+                  style={styles.busThumbnail}
+                  resizeMode="cover"
+                />
               </View>
 
               <View style={styles.busInfo}>
@@ -430,6 +554,218 @@ const styles = StyleSheet.create({
     backgroundColor: COLORS.background,
   },
 
+  platformContent: {
+    padding: 18,
+    paddingBottom: 44,
+  },
+
+  platformHeader: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginBottom: 18,
+  },
+
+  platformBackButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 14,
+    backgroundColor: COLORS.white,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 12,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+  },
+
+  platformBackText: {
+    fontSize: 30,
+    color: COLORS.navy,
+    marginTop: -3,
+  },
+
+  platformTitle: {
+    fontSize: 24,
+    fontWeight: "900",
+    color: COLORS.navy,
+  },
+
+  platformSub: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 2,
+  },
+
+  busHeroCard: {
+    height: 230,
+    borderRadius: 22,
+    overflow: "hidden",
+    backgroundColor: COLORS.white,
+    marginBottom: 14,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    position: "relative",
+  },
+
+  busHeroImage: {
+    width: "100%",
+    height: "100%",
+  },
+
+  liveBadge: {
+    position: "absolute",
+    top: 14,
+    left: 14,
+    paddingHorizontal: 11,
+    paddingVertical: 7,
+    borderRadius: 20,
+    backgroundColor: "#E8FFF2",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  liveDot: {
+    width: 8,
+    height: 8,
+    borderRadius: 4,
+    backgroundColor: COLORS.green,
+    marginRight: 6,
+  },
+
+  liveBadgeText: {
+    fontSize: 10,
+    fontWeight: "900",
+    color: COLORS.green,
+  },
+
+  platformInfoCard: {
+    backgroundColor: COLORS.white,
+    borderRadius: 20,
+    padding: 18,
+    borderWidth: 1,
+    borderColor: COLORS.line,
+    marginBottom: 14,
+  },
+
+  platformOperator: {
+    fontSize: 21,
+    fontWeight: "900",
+    color: COLORS.navy,
+  },
+
+  platformType: {
+    fontSize: 12,
+    color: COLORS.muted,
+    marginTop: 3,
+  },
+
+  platformRouteRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+    marginTop: 22,
+  },
+
+  platformLabel: {
+    fontSize: 9,
+    fontWeight: "900",
+    color: COLORS.muted,
+    letterSpacing: 0.8,
+  },
+
+  platformTime: {
+    fontSize: 20,
+    fontWeight: "900",
+    color: COLORS.navy,
+    marginTop: 5,
+  },
+
+  platformPlace: {
+    fontSize: 11,
+    fontWeight: "700",
+    color: COLORS.navy,
+    marginTop: 2,
+  },
+
+  platformArrowBox: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    backgroundColor: COLORS.goldLight,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  platformArrow: {
+    fontSize: 22,
+    color: COLORS.gold,
+    fontWeight: "900",
+  },
+
+  platformRight: {
+    alignItems: "flex-end",
+  },
+
+  platformDivider: {
+    height: 1,
+    backgroundColor: COLORS.line,
+    marginVertical: 18,
+  },
+
+  platformGrid: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+  },
+
+  platformValue: {
+    fontSize: 13,
+    fontWeight: "800",
+    color: COLORS.navy,
+    marginTop: 5,
+  },
+
+  platformNotice: {
+    backgroundColor: COLORS.goldLight,
+    borderRadius: 18,
+    padding: 16,
+    marginBottom: 14,
+  },
+
+  platformNoticeTitle: {
+    fontSize: 13,
+    fontWeight: "900",
+    color: COLORS.navy,
+  },
+
+  platformNoticeText: {
+    fontSize: 11,
+    lineHeight: 17,
+    color: COLORS.muted,
+    marginTop: 7,
+  },
+
+  chooseBusButton: {
+    minHeight: 54,
+    borderRadius: 16,
+    backgroundColor: COLORS.navy,
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  chooseBusButtonText: {
+    color: COLORS.white,
+    fontSize: 14,
+    fontWeight: "900",
+  },
+
+  chooseBusArrow: {
+    color: COLORS.white,
+    fontSize: 20,
+    fontWeight: "900",
+    marginLeft: 12,
+  },
+
+
   content: {
     padding: 18,
     paddingBottom: 40,
@@ -599,6 +935,11 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
     marginRight: 12,
+  },
+
+  busThumbnail: {
+    width: "100%",
+    height: "100%",
   },
 
   busEmoji: {
