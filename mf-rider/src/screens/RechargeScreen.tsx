@@ -1,7 +1,9 @@
-import React, { useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import {
+  ActivityIndicator,
   Alert,
   Pressable,
+  RefreshControl,
   ScrollView,
   StyleSheet,
   Text,
@@ -9,30 +11,79 @@ import {
   View,
 } from "react-native";
 
+import { useAuth } from "../context/AuthContext";
+import {
+  fetchWallet,
+  fetchWalletTransactions,
+  minorToRupees,
+} from "../api/wallet";
+
 interface Props {
   onBack: () => void;
 }
 
-const operators = [
-  "Jio",
-  "Airtel",
-  "Vi",
-  "BSNL",
-];
+const operators = ["Jio", "Airtel", "Vi", "BSNL"];
 
-const amounts = [
-  "199",
-  "299",
-  "399",
-  "499",
-];
+const amounts = ["199", "299", "399", "499"];
 
 export function RechargeScreen({ onBack }: Props) {
+  const { token } = useAuth();
+
   const [mobile, setMobile] = useState("");
-  const [operator, setOperator] =
-    useState<string | null>(null);
-  const [amount, setAmount] =
-    useState<string | null>(null);
+  const [operator, setOperator] = useState<string | null>(null);
+  const [amount, setAmount] = useState<string | null>(null);
+
+  const [walletBalance, setWalletBalance] = useState<number | null>(null);
+  const [walletCurrency, setWalletCurrency] = useState("INR");
+
+  const [loadingWallet, setLoadingWallet] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+
+  const [walletError, setWalletError] = useState<string | null>(null);
+
+  const loadWallet = useCallback(
+    async (isRefresh = false) => {
+      if (!token) {
+        setLoadingWallet(false);
+        setWalletError("Please login to view your wallet.");
+        return;
+      }
+
+      try {
+        if (isRefresh) {
+          setRefreshing(true);
+        } else {
+          setLoadingWallet(true);
+        }
+
+        setWalletError(null);
+
+        const result = await fetchWallet(token);
+
+        setWalletBalance(
+          minorToRupees(result.wallet.availableMinor),
+        );
+
+        setWalletCurrency(result.wallet.currency);
+      } catch (error) {
+        console.error("WALLET LOAD ERROR:", error);
+
+        setWalletError(
+          error instanceof Error
+            ? error.message
+            : "Unable to load wallet.",
+        );
+      } finally {
+        setLoadingWallet(false);
+        setRefreshing(false);
+      }
+    },
+    [token],
+  );
+
+  useEffect(() => {
+    loadWallet();
+  }, [loadWallet]);
 
   const handleRecharge = () => {
     if (mobile.length !== 10) {
@@ -59,22 +110,36 @@ export function RechargeScreen({ onBack }: Props) {
       return;
     }
 
+    const rechargeAmount = Number(amount);
+
+    if (!Number.isFinite(rechargeAmount) || rechargeAmount <= 0) {
+      Alert.alert(
+        "Invalid amount",
+        "Please select a valid recharge amount.",
+      );
+      return;
+    }
+
+    if (
+      walletBalance !== null &&
+      rechargeAmount > walletBalance
+    ) {
+      Alert.alert(
+        "Insufficient wallet balance",
+        `Your wallet balance is ₹${walletBalance.toFixed(
+          2,
+        )}. Please add money to your wallet before continuing.`,
+      );
+      return;
+    }
+
     Alert.alert(
-      "Confirm Recharge",
-      `Mobile: +91 ${mobile}\nOperator: ${operator}\nAmount: ₹${amount}`,
+      "Recharge Ready",
+      `Mobile: +91 ${mobile}\nOperator: ${operator}\nAmount: ₹${amount}\n\nThe recharge payment API is not connected yet.`,
       [
         {
-          text: "Cancel",
+          text: "OK",
           style: "cancel",
-        },
-        {
-          text: "Pay Now",
-          onPress: () => {
-            Alert.alert(
-              "Recharge Successful 🎉",
-              `₹${amount} recharge request created successfully.`,
-            );
-          },
         },
       ],
     );
@@ -85,6 +150,12 @@ export function RechargeScreen({ onBack }: Props) {
       <ScrollView
         showsVerticalScrollIndicator={false}
         contentContainerStyle={styles.container}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshing}
+            onRefresh={() => loadWallet(true)}
+          />
+        }
       >
         {/* HEADER */}
 
@@ -96,7 +167,7 @@ export function RechargeScreen({ onBack }: Props) {
             <Text style={styles.backText}>←</Text>
           </Pressable>
 
-          <View>
+          <View style={styles.headerContent}>
             <Text style={styles.headerTitle}>
               Recharge
             </Text>
@@ -107,6 +178,50 @@ export function RechargeScreen({ onBack }: Props) {
           </View>
         </View>
 
+        {/* WALLET */}
+
+        <View style={styles.walletCard}>
+          <View style={styles.walletTopRow}>
+            <View>
+              <Text style={styles.walletLabel}>
+                WALLET BALANCE
+              </Text>
+
+              {loadingWallet ? (
+                <ActivityIndicator
+                  size="small"
+                  color="#E7A400"
+                  style={styles.walletLoader}
+                />
+              ) : (
+                <Text style={styles.walletBalance}>
+                  {walletCurrency === "INR" ? "₹" : walletCurrency}{" "}
+                  {walletBalance !== null
+                    ? walletBalance.toFixed(2)
+                    : "0.00"}
+                </Text>
+              )}
+            </View>
+
+            <Pressable
+              onPress={() => loadWallet(true)}
+              style={styles.refreshButton}
+            >
+              <Text style={styles.refreshText}>↻</Text>
+            </Pressable>
+          </View>
+
+          {walletError ? (
+            <Text style={styles.walletError}>
+              {walletError}
+            </Text>
+          ) : (
+            <Text style={styles.walletHelper}>
+              Available balance for payments
+            </Text>
+          )}
+        </View>
+
         {/* HERO */}
 
         <View style={styles.hero}>
@@ -114,7 +229,7 @@ export function RechargeScreen({ onBack }: Props) {
             <Text style={styles.heroEmoji}>⚡</Text>
           </View>
 
-          <View style={{ flex: 1 }}>
+          <View style={styles.heroContent}>
             <Text style={styles.heroTitle}>
               Recharge instantly
             </Text>
@@ -168,19 +283,15 @@ export function RechargeScreen({ onBack }: Props) {
 
         <View style={styles.operatorGrid}>
           {operators.map((item) => {
-            const selected =
-              operator === item;
+            const selected = operator === item;
 
             return (
               <Pressable
                 key={item}
-                onPress={() =>
-                  setOperator(item)
-                }
+                onPress={() => setOperator(item)}
                 style={[
                   styles.operator,
-                  selected &&
-                    styles.operatorSelected,
+                  selected && styles.operatorSelected,
                 ]}
               >
                 <View style={styles.operatorIcon}>
@@ -211,19 +322,15 @@ export function RechargeScreen({ onBack }: Props) {
 
         <View style={styles.amountGrid}>
           {amounts.map((item) => {
-            const selected =
-              amount === item;
+            const selected = amount === item;
 
             return (
               <Pressable
                 key={item}
-                onPress={() =>
-                  setAmount(item)
-                }
+                onPress={() => setAmount(item)}
                 style={[
                   styles.amount,
-                  selected &&
-                    styles.amountSelected,
+                  selected && styles.amountSelected,
                 ]}
               >
                 <Text
@@ -255,6 +362,12 @@ export function RechargeScreen({ onBack }: Props) {
             <Text style={styles.rupee}>₹</Text>
 
             <TextInput
+              value={
+                amount &&
+                !amounts.includes(amount)
+                  ? amount
+                  : ""
+              }
               placeholder="Custom amount"
               placeholderTextColor="#9A9EAA"
               keyboardType="number-pad"
@@ -265,6 +378,8 @@ export function RechargeScreen({ onBack }: Props) {
 
                 if (clean) {
                   setAmount(clean);
+                } else {
+                  setAmount(null);
                 }
               }}
             />
@@ -308,9 +423,7 @@ export function RechargeScreen({ onBack }: Props) {
             Continue to Payment
           </Text>
 
-          <Text style={styles.arrow}>
-            →
-          </Text>
+          <Text style={styles.arrow}>→</Text>
         </Pressable>
 
         {/* SECURITY */}
@@ -320,7 +433,7 @@ export function RechargeScreen({ onBack }: Props) {
             ✓
           </Text>
 
-          <View style={{ flex: 1 }}>
+          <View style={styles.securityContent}>
             <Text style={styles.securityTitle}>
               Safe & Secure
             </Text>
@@ -370,6 +483,10 @@ const styles = StyleSheet.create({
     color: "#152238",
   },
 
+  headerContent: {
+    flex: 1,
+  },
+
   headerTitle: {
     fontSize: 22,
     fontWeight: "900",
@@ -380,6 +497,65 @@ const styles = StyleSheet.create({
     marginTop: 3,
     fontSize: 12,
     color: "#717489",
+  },
+
+  walletCard: {
+    padding: 19,
+    borderRadius: 22,
+    backgroundColor: "#171C2B",
+    marginBottom: 18,
+  },
+
+  walletTopRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  walletLabel: {
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.5,
+    color: "#BFC4D0",
+  },
+
+  walletBalance: {
+    marginTop: 6,
+    fontSize: 27,
+    fontWeight: "900",
+    color: "#E7A400",
+  },
+
+  walletLoader: {
+    marginTop: 12,
+    alignSelf: "flex-start",
+  },
+
+  walletHelper: {
+    marginTop: 8,
+    fontSize: 10,
+    color: "#BFC4D0",
+  },
+
+  walletError: {
+    marginTop: 8,
+    fontSize: 10,
+    color: "#FFB4B4",
+  },
+
+  refreshButton: {
+    width: 42,
+    height: 42,
+    borderRadius: 13,
+    backgroundColor: "#252B3C",
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  refreshText: {
+    color: "#E7A400",
+    fontSize: 24,
+    fontWeight: "800",
   },
 
   hero: {
@@ -403,6 +579,10 @@ const styles = StyleSheet.create({
 
   heroEmoji: {
     fontSize: 32,
+  },
+
+  heroContent: {
+    flex: 1,
   },
 
   heroTitle: {
@@ -674,6 +854,10 @@ const styles = StyleSheet.create({
     textAlignVertical: "center",
     fontSize: 18,
     fontWeight: "900",
+  },
+
+  securityContent: {
+    flex: 1,
   },
 
   securityTitle: {
