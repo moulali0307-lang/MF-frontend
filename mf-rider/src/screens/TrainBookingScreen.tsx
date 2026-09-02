@@ -1394,8 +1394,8 @@ export function TrainBookingScreen({
                 ) : null}
 
                 {liveStatus.haltedAtStation ? (
-                  <Text style={styles.haltedText}>
-                    Currently halted at a station
+                  <Text style={styles.haltText}>
+                    Currently halt at a station
                   </Text>
                 ) : null}
               </View>
@@ -3011,17 +3011,8 @@ const styles =
       backgroundColor: "#111827",
     },
 
-    selectedDayText: {
-      color: "#FFFFFF",
-      fontWeight: "800",
-    },
-
     disabledDay: {
       opacity: 0.35,
-    },
-
-    disabledDayText: {
-      color: "#9CA3AF",
     },
 
     calendarCancel: {

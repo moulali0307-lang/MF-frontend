@@ -12,19 +12,23 @@ import {
 } from "react-native";
 
 import { useAuth } from "../context/AuthContext";
-import {
-  fetchWallet,
-  fetchWalletTransactions,
-  minorToRupees,
-} from "../api/wallet";
+import { fetchWallet } from "../api/wallet";
 
 interface Props {
   onBack: () => void;
 }
 
 const operators = ["Jio", "Airtel", "Vi", "BSNL"];
-
 const amounts = ["199", "299", "399", "499"];
+
+/**
+ * Wallet stores money in the smallest currency unit.
+ * For INR:
+ * ₹500 = 50000 paise
+ */
+function minorToRupees(value: number | string | bigint): number {
+  return Number(value) / 100;
+}
 
 export function RechargeScreen({ onBack }: Props) {
   const { token } = useAuth();
@@ -38,7 +42,6 @@ export function RechargeScreen({ onBack }: Props) {
 
   const [loadingWallet, setLoadingWallet] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   const [walletError, setWalletError] = useState<string | null>(null);
 
   const loadWallet = useCallback(
@@ -60,11 +63,28 @@ export function RechargeScreen({ onBack }: Props) {
 
         const result = await fetchWallet(token);
 
+        const wallet = result.wallet as {
+          availableMinor?: number | string | bigint;
+          balanceMinor?: number | string | bigint;
+          balance?: number | string;
+          currency?: string;
+        };
+
+        let balance = 0;
+
+        if (wallet.availableMinor !== undefined) {
+          balance = minorToRupees(wallet.availableMinor);
+        } else if (wallet.balanceMinor !== undefined) {
+          balance = minorToRupees(wallet.balanceMinor);
+        } else if (wallet.balance !== undefined) {
+          balance = Number(wallet.balance);
+        }
+
         setWalletBalance(
-          minorToRupees(result.wallet.availableMinor),
+          Number.isFinite(balance) ? balance : 0,
         );
 
-        setWalletCurrency(result.wallet.currency);
+        setWalletCurrency(wallet.currency || "INR");
       } catch (error) {
         console.error("WALLET LOAD ERROR:", error);
 
@@ -112,7 +132,10 @@ export function RechargeScreen({ onBack }: Props) {
 
     const rechargeAmount = Number(amount);
 
-    if (!Number.isFinite(rechargeAmount) || rechargeAmount <= 0) {
+    if (
+      !Number.isFinite(rechargeAmount) ||
+      rechargeAmount <= 0
+    ) {
       Alert.alert(
         "Invalid amount",
         "Please select a valid recharge amount.",
@@ -195,7 +218,9 @@ export function RechargeScreen({ onBack }: Props) {
                 />
               ) : (
                 <Text style={styles.walletBalance}>
-                  {walletCurrency === "INR" ? "₹" : walletCurrency}{" "}
+                  {walletCurrency === "INR"
+                    ? "₹"
+                    : walletCurrency}{" "}
                   {walletBalance !== null
                     ? walletBalance.toFixed(2)
                     : "0.00"}
@@ -249,17 +274,13 @@ export function RechargeScreen({ onBack }: Props) {
           </Text>
 
           <View style={styles.input}>
-            <Text style={styles.country}>
-              +91
-            </Text>
+            <Text style={styles.country}>+91</Text>
 
             <TextInput
               value={mobile}
               onChangeText={(value) =>
                 setMobile(
-                  value
-                    .replace(/\D/g, "")
-                    .slice(0, 10),
+                  value.replace(/\D/g, "").slice(0, 10),
                 )
               }
               keyboardType="phone-pad"
@@ -270,8 +291,7 @@ export function RechargeScreen({ onBack }: Props) {
           </View>
 
           <Text style={styles.helper}>
-            Enter the mobile number you want to
-            recharge.
+            Enter the mobile number you want to recharge.
           </Text>
         </View>
 
@@ -363,8 +383,7 @@ export function RechargeScreen({ onBack }: Props) {
 
             <TextInput
               value={
-                amount &&
-                !amounts.includes(amount)
+                amount && !amounts.includes(amount)
                   ? amount
                   : ""
               }
@@ -376,11 +395,7 @@ export function RechargeScreen({ onBack }: Props) {
                 const clean =
                   value.replace(/\D/g, "");
 
-                if (clean) {
-                  setAmount(clean);
-                } else {
-                  setAmount(null);
-                }
+                setAmount(clean || null);
               }}
             />
           </View>
@@ -429,9 +444,7 @@ export function RechargeScreen({ onBack }: Props) {
         {/* SECURITY */}
 
         <View style={styles.security}>
-          <Text style={styles.securityIcon}>
-            ✓
-          </Text>
+          <Text style={styles.securityIcon}>✓</Text>
 
           <View style={styles.securityContent}>
             <Text style={styles.securityTitle}>

@@ -25,12 +25,16 @@ export interface RailwayTrain {
   };
 
   from: {
+    stationCode?: string;
+    stationName?: string;
     departure?: string;
     day?: number;
     sequence?: number;
   };
 
   to: {
+    stationCode?: string;
+    stationName?: string;
     arrival?: string;
     day?: number;
     sequence?: number;
@@ -42,6 +46,7 @@ export interface RailwayTrain {
 
   live?: TrainLiveInfo;
 }
+
 
 export interface TrainSearchResult {
   from: {
@@ -64,20 +69,31 @@ export interface TrainSearchResult {
 export interface LiveTrainStatus {
   trainNumber: string;
   trainName: string;
+
   startDate?: string;
   lastUpdatedAt?: string;
   status?: string;
   delayMinutes?: number;
+  
+
+  /*
+   * Additional fields used by TrainBookingScreen
+   */
+  distanceKm?: number | null;
+  haltedAtStation?: string | null;
+  haltedText?: string | null;
 
   train?: {
     number?: string;
     name?: string;
     type?: string;
     category?: string;
+
     source?: {
       code?: string;
       name?: string;
     };
+
     destination?: {
       code?: string;
       name?: string;
@@ -88,10 +104,13 @@ export interface LiveTrainStatus {
     stationCode?: string;
     sequence?: number;
     status?: string;
+
     isHalt?: boolean;
     isDiverted?: boolean;
     isActualPosition?: boolean;
+
     segmentProgress?: number;
+
     speedKmh?: number;
     bearingDegrees?: number;
   };
@@ -112,17 +131,25 @@ export interface LiveTrainStatus {
 
   route?: Array<{
     sequence?: number;
+
     stationCode?: string;
     stationName?: string;
+
     isHalt?: boolean;
+
     scheduledArrival?: string | null;
     scheduledDeparture?: string | null;
+
     actualArrival?: string | null;
     actualDeparture?: string | null;
+
     delayArrival?: number | null;
     delayDeparture?: number | null;
+
     status?: string;
+
     distance?: number;
+
     platform?: string | null;
   }>;
 
@@ -133,18 +160,17 @@ export async function searchStations(
   query: string,
   token: string,
 ): Promise<RailwayStation[]> {
-  const result =
-    await apiRequest<{
-      stations: RailwayStation[];
-    }>(
-      `/api/railways/stations?q=${encodeURIComponent(
-        query.trim(),
-      )}`,
-      {
-        method: "GET",
-        token,
-      },
-    );
+  const result = await apiRequest<{
+    stations: RailwayStation[];
+  }>(
+    `/api/railways/stations?q=${encodeURIComponent(
+      query.trim(),
+    )}`,
+    {
+      method: "GET",
+      token,
+    },
+  );
 
   return result.stations ?? [];
 }
@@ -175,20 +201,19 @@ export async function getLiveTrainStatus(
   date: string,
   token: string,
 ): Promise<LiveTrainStatus> {
-  const result =
-    await apiRequest<{
-      train: LiveTrainStatus;
-    }>(
-      `/api/railways/trains/${encodeURIComponent(
-        trainNumber,
-      )}/live?date=${encodeURIComponent(
-        date,
-      )}`,
-      {
-        method: "GET",
-        token,
-      },
-    );
+  const result = await apiRequest<{
+    train: LiveTrainStatus;
+  }>(
+    `/api/railways/trains/${encodeURIComponent(
+      trainNumber,
+    )}/live?date=${encodeURIComponent(
+      date,
+    )}`,
+    {
+      method: "GET",
+      token,
+    },
+  );
 
   return result.train;
 }
