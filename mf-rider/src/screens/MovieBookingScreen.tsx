@@ -1,4 +1,9 @@
-import React, { useEffect, useMemo, useState } from "react";
+import React, {
+  useEffect,
+  useMemo,
+  useState,
+} from "react";
+
 import {
   ActivityIndicator,
   Alert,
@@ -10,218 +15,72 @@ import {
   View,
 } from "react-native";
 
-import { apiRequest } from "../api/client";
+import {
+  fetchMovies,
+  fetchMovieShows,
+  fetchMovieSeats,
+  holdMovieSeats,
+  type Movie,
+  type Theatre,
+  type MovieShow,
+  type MovieSeat,
+} from "../api/movies";
+
 import { useAuth } from "../context/AuthContext";
-import { fetchMovieShows } from "../api/movies";
+
+/* ============================================================
+   PROPS
+============================================================ */
 
 interface Props {
   onBack: () => void;
 }
 
 /* ============================================================
-   TYPES
-============================================================ */
-
-type SeatStatus =
-  | "AVAILABLE"
-  | "BOOKED"
-  | "BLOCKED"
-  | "SELECTED";
-
-interface Movie {
-  id: string;
-  title: string;
-  language?: string;
-  certificate?: string;
-  genre?: string;
-  durationMinutes?: number;
-  posterUrl?: string | null;
-}
-
-interface Theatre {
-  id: string;
-  name: string;
-  address?: string;
-  city?: string;
-  distanceKm?: number;
-}
-
-interface Show {
-  id: string;
-  movieId: string;
-  theatreId: string;
-  time: string;
-  format?: string;
-  screenName?: string;
-  price?: number;
-}
-
-interface Seat {
-  id: string;
-  row: string;
-  number: number;
-  label: string;
-  status: SeatStatus;
-  price: number;
-}
-
-interface MoviesResponse {
-  movies?: Movie[];
-}
-
-interface TheatresResponse {
-  theatres?: Theatre[];
-}
-
-interface ShowsResponse {
-  shows?: Show[];
-}
-
-interface SeatsResponse {
-  seats?: Seat[];
-}
-
-/* ============================================================
-   API
-============================================================ */
-
-/*
- * These are MF Rides backend endpoints.
- *
- * Backend must connect these endpoints to the actual movie/cinema
- * provider. The mobile app must NOT invent seat availability.
- */
-
-async function fetchMovies(
-  city: string,
-  date: string,
-  token: string,
-): Promise<Movie[]> {
-  const result = await apiRequest<MoviesResponse>(
-    `/api/movies?city=${encodeURIComponent(
-      city,
-    )}&date=${encodeURIComponent(date)}`,
-    {
-      method: "GET",
-      token,
-    },
-  );
-
-  return result.movies ?? [];
-}
-
-async function fetchTheatres(
-  movieId: string,
-  city: string,
-  date: string,
-  token: string,
-): Promise<Theatre[]> {
-  const result = await apiRequest<TheatresResponse>(
-    `/api/movies/${encodeURIComponent(
-      movieId,
-    )}/theatres?city=${encodeURIComponent(
-      city,
-    )}&date=${encodeURIComponent(date)}`,
-    {
-      method: "GET",
-      token,
-    },
-  );
-
-  return result.theatres ?? [];
-}
-
-async function fetchShows(
-  movieId: string,
-  theatreId: string,
-  date: string,
-  token: string,
-): Promise<Show[]> {
-  const result = await apiRequest<ShowsResponse>(
-    `/api/movies/shows?movieId=${encodeURIComponent(
-      movieId,
-    )}&theatreId=${encodeURIComponent(
-      theatreId,
-    )}&date=${encodeURIComponent(date)}`,
-    {
-      method: "GET",
-      token,
-    },
-  );
-
-  return result.shows ?? [];
-}
-
-async function fetchSeats(
-  showId: string,
-  token: string,
-): Promise<Seat[]> {
-  const result = await apiRequest<SeatsResponse>(
-    `/api/movies/shows/${encodeURIComponent(
-      showId,
-    )}/seats`,
-    {
-      method: "GET",
-      token,
-    },
-  );
-
-  return result.seats ?? [];
-}
-
-async function holdSeats(
-  showId: string,
-  seatIds: string[],
-  token: string,
-): Promise<{ holdId: string; expiresAt?: string }> {
-  return apiRequest<{
-    holdId: string;
-    expiresAt?: string;
-  }>(
-    `/api/movies/shows/${encodeURIComponent(
-      showId,
-    )}/hold`,
-    {
-      method: "POST",
-      token,
-      body: {
-        seatIds,
-      },
-    },
-  );
-}
-
-/* ============================================================
    HELPERS
 ============================================================ */
 
-function getTodayDate() {
+function getTodayDate(): string {
   const now = new Date();
 
-  const year = now.getFullYear();
-  const month = String(
-    now.getMonth() + 1,
-  ).padStart(2, "0");
-  const day = String(
-    now.getDate(),
-  ).padStart(2, "0");
+  const year =
+    now.getFullYear();
+
+  const month =
+    String(
+      now.getMonth() + 1,
+    ).padStart(2, "0");
+
+  const day =
+    String(
+      now.getDate(),
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
-function formatDate(date: Date) {
-  const year = date.getFullYear();
-  const month = String(
-    date.getMonth() + 1,
-  ).padStart(2, "0");
-  const day = String(
-    date.getDate(),
-  ).padStart(2, "0");
+function formatDate(
+  date: Date,
+): string {
+  const year =
+    date.getFullYear();
+
+  const month =
+    String(
+      date.getMonth() + 1,
+    ).padStart(2, "0");
+
+  const day =
+    String(
+      date.getDate(),
+    ).padStart(2, "0");
 
   return `${year}-${month}-${day}`;
 }
 
-function getDateLabel(date: Date) {
+function getDateLabel(
+  date: Date,
+): string {
   return date.toLocaleDateString(
     "en-IN",
     {
@@ -232,46 +91,51 @@ function getDateLabel(date: Date) {
   );
 }
 
+function formatTime(
+  value: string,
+): string {
+  const date =
+    new Date(value);
+
+  if (
+    Number.isNaN(
+      date.getTime(),
+    )
+  ) {
+    return value;
+  }
+
+  return date.toLocaleTimeString(
+    "en-IN",
+    {
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    },
+  );
+}
+
 /* ============================================================
    SCREEN
 ============================================================ */
 
-export function MovieBookingScreen({
+function MovieBookingScreen({
   onBack,
 }: Props) {
-  const { token } = useAuth();
+  const { token } =
+    useAuth();
 
   /* ----------------------------------------------------------
-     LOCATION / DATE
+     SEARCH
   ---------------------------------------------------------- */
 
   const [city, setCity] =
     useState("");
 
   const [selectedDate, setSelectedDate] =
-    useState(getTodayDate());
-
-  const dateOptions = useMemo(() => {
-    const dates: {
-      value: string;
-      label: string;
-    }[] = [];
-
-    for (let i = 0; i < 7; i++) {
-      const date = new Date();
-
-      date.setDate(
-        date.getDate() + i,
-      );
-
-      dates.push({
-        value: formatDate(date),
-        label: getDateLabel(date),
-      });
-    }
-
-    return dates;
-  }, []);
+    useState(
+      getTodayDate(),
+    );
 
   /* ----------------------------------------------------------
      DATA
@@ -280,14 +144,11 @@ export function MovieBookingScreen({
   const [movies, setMovies] =
     useState<Movie[]>([]);
 
-  const [theatres, setTheatres] =
-    useState<Theatre[]>([]);
-
   const [shows, setShows] =
-    useState<Show[]>([]);
+    useState<MovieShow[]>([]);
 
   const [seats, setSeats] =
-    useState<Seat[]>([]);
+    useState<MovieSeat[]>([]);
 
   /* ----------------------------------------------------------
      SELECTION
@@ -300,7 +161,7 @@ export function MovieBookingScreen({
     useState<Theatre | null>(null);
 
   const [selectedShow, setSelectedShow] =
-    useState<Show | null>(null);
+    useState<MovieShow | null>(null);
 
   const [selectedSeats, setSelectedSeats] =
     useState<string[]>([]);
@@ -310,9 +171,6 @@ export function MovieBookingScreen({
   ---------------------------------------------------------- */
 
   const [loadingMovies, setLoadingMovies] =
-    useState(false);
-
-  const [loadingTheatres, setLoadingTheatres] =
     useState(false);
 
   const [loadingShows, setLoadingShows] =
@@ -327,284 +185,461 @@ export function MovieBookingScreen({
   const [errorMessage, setErrorMessage] =
     useState("");
 
+  /* ----------------------------------------------------------
+     DATE OPTIONS
+  ---------------------------------------------------------- */
+
+  const dateOptions =
+    useMemo(() => {
+      const result: {
+        value: string;
+        label: string;
+      }[] = [];
+
+      for (
+        let i = 0;
+        i < 7;
+        i++
+      ) {
+        const date =
+          new Date();
+
+        date.setDate(
+          date.getDate() + i,
+        );
+
+        result.push({
+          value:
+            formatDate(date),
+          label:
+            getDateLabel(date),
+        });
+      }
+
+      return result;
+    }, []);
+
   /* ==========================================================
      LOAD MOVIES
   ========================================================== */
 
+  const loadMovies =
+    async () => {
+      const trimmedCity =
+        city.trim();
+
+      if (!trimmedCity) {
+        setMovies([]);
+        setShows([]);
+        setSeats([]);
+        setSelectedMovie(null);
+        setSelectedTheatre(null);
+        setSelectedShow(null);
+        setSelectedSeats([]);
+        setErrorMessage(
+          "Please enter a city.",
+        );
+        return;
+      }
+
+      if (!token) {
+        setErrorMessage(
+          "Please login again.",
+        );
+        return;
+      }
+
+      try {
+        setLoadingMovies(true);
+        setErrorMessage("");
+
+        setSelectedMovie(null);
+        setSelectedTheatre(null);
+        setSelectedShow(null);
+        setSelectedSeats([]);
+
+        setShows([]);
+        setSeats([]);
+
+        const result =
+          await fetchMovies(
+            trimmedCity,
+            selectedDate,
+            token,
+          );
+
+        /*
+         * IMPORTANT:
+         * This was missing in the old code.
+         */
+        setMovies(
+          Array.isArray(result)
+            ? result
+            : [],
+        );
+
+        if (
+          !result ||
+          result.length === 0
+        ) {
+          setErrorMessage(
+            `No movies found in ${trimmedCity}.`,
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Movie loading error:",
+          error,
+        );
+
+        setMovies([]);
+        setErrorMessage(
+          "Unable to load movies. Please try again.",
+        );
+      } finally {
+        setLoadingMovies(false);
+      }
+    };
+
+  /* ==========================================================
+     DATE CHANGE
+  ========================================================== */
+
   useEffect(() => {
-    if (!token) {
-      return;
+    if (
+      city.trim() &&
+      token
+    ) {
+      loadMovies();
     }
+  }, [
+    selectedDate,
+  ]);
 
-    loadMovies();
-  }, [token, selectedDate]);
+  /* ==========================================================
+     SELECT MOVIE
+  ========================================================== */
 
-  const loadMovies = async () => {
-    if (!city.trim()) {
-      setMovies([]);
-      return;
-    }
+  const selectMovie =
+    async (
+      movie: Movie,
+    ) => {
+      if (!token) {
+        Alert.alert(
+          "Login required",
+          "Please login again.",
+        );
+        return;
+      }
 
-    try {
-      setLoadingMovies(true);
-      setErrorMessage("");
+      try {
+        setSelectedMovie(movie);
+        setSelectedTheatre(null);
+        setSelectedShow(null);
+        setSelectedSeats([]);
 
-      setSelectedMovie(null);
-      setSelectedTheatre(null);
+        setShows([]);
+        setSeats([]);
+
+        setLoadingShows(true);
+        setErrorMessage("");
+
+        /*
+         * Backend returns theatre information
+         * with every MovieShow.
+         */
+        const result =
+          await fetchMovieShows(
+            movie.id,
+            city.trim(),
+            selectedDate,
+            token,
+          );
+
+        setShows(
+          Array.isArray(result)
+            ? result
+            : [],
+        );
+
+        if (
+          !result ||
+          result.length === 0
+        ) {
+          setErrorMessage(
+            "No shows available for this movie.",
+          );
+        }
+      } catch (error) {
+        console.error(
+          "Movie shows error:",
+          error,
+        );
+
+        setShows([]);
+        setErrorMessage(
+          "Unable to load theatres and show timings.",
+        );
+      } finally {
+        setLoadingShows(false);
+      }
+    };
+
+  /* ==========================================================
+     THEATRES FROM SHOWS
+  ========================================================== */
+
+  const theatres =
+    useMemo(() => {
+      const map =
+        new Map<
+          string,
+          Theatre
+        >();
+
+      for (const show of shows) {
+        if (
+          show.theatre &&
+          !map.has(
+            show.theatre.id,
+          )
+        ) {
+          map.set(
+            show.theatre.id,
+            show.theatre,
+          );
+        }
+      }
+
+      return Array.from(
+        map.values(),
+      );
+    }, [shows]);
+
+  /* ==========================================================
+     SHOWS FOR SELECTED THEATRE
+  ========================================================== */
+
+  const theatreShows =
+    useMemo(() => {
+      if (
+        !selectedTheatre
+      ) {
+        return [];
+      }
+
+      return shows.filter(
+        (show) =>
+          show.theatre.id ===
+          selectedTheatre.id,
+      );
+    }, [
+      shows,
+      selectedTheatre,
+    ]);
+
+  /* ==========================================================
+     SELECT THEATRE
+  ========================================================== */
+
+  const selectTheatre =
+    (theatre: Theatre) => {
+      setSelectedTheatre(
+        theatre,
+      );
+
       setSelectedShow(null);
       setSelectedSeats([]);
-
-      setTheatres([]);
-      setShows([]);
       setSeats([]);
-
-      const shows = await fetchMovieShows(
-      movie.id,
-      city,
-      selectedDate ?? "",
-      token,
-    );
-      setMovies(result);
-    } catch (error) {
-      console.error(
-        "Movie loading error:",
-        error,
-      );
-
-      setMovies([]);
-
-      setErrorMessage(
-        "Unable to load movies. Please try again.",
-      );
-    } finally {
-      setLoadingMovies(false);
-    }
-  };
+    };
 
   /* ==========================================================
-     LOAD THEATRES
+     SELECT SHOW
   ========================================================== */
 
-  const selectMovie = async (
-    movie: Movie,
-  ) => {
-    if (!token) {
-      return;
-    }
-
-    setSelectedMovie(movie);
-    setSelectedTheatre(null);
-    setSelectedShow(null);
-    setSelectedSeats([]);
-
-    setShows([]);
-    setSeats([]);
-
-    try {
-      setLoadingTheatres(true);
-      setErrorMessage("");
-
-      const result =
-        await fetchTheatres(
-          movie.id,
-          city.trim(),
-          selectedDate,
-          token,
+  const selectShow =
+    async (
+      show: MovieShow,
+    ) => {
+      if (!token) {
+        Alert.alert(
+          "Login required",
+          "Please login again.",
         );
+        return;
+      }
 
-      setTheatres(result);
-    } catch (error) {
-      console.error(
-        "Theatre loading error:",
-        error,
-      );
+      try {
+        setSelectedShow(show);
+        setSelectedSeats([]);
+        setSeats([]);
 
-      setTheatres([]);
+        setLoadingSeats(true);
+        setErrorMessage("");
 
-      setErrorMessage(
-        "Unable to load theatres for this movie.",
-      );
-    } finally {
-      setLoadingTheatres(false);
-    }
-  };
-
-  /* ==========================================================
-     LOAD SHOWS
-  ========================================================== */
-
-  const selectTheatre = async (
-    theatre: Theatre,
-  ) => {
-    if (!token || !selectedMovie) {
-      return;
-    }
-
-    setSelectedTheatre(theatre);
-    setSelectedShow(null);
-    setSelectedSeats([]);
-
-    setSeats([]);
-
-    try {
-      setLoadingShows(true);
-      setErrorMessage("");
-
-      const result =
-        await fetchShows(
-          selectedMovie.id,
-          theatre.id,
-          selectedDate,
-          token,
-        );
-
-      setShows(result);
-    } catch (error) {
-      console.error(
-        "Show loading error:",
-        error,
-      );
-
-      setShows([]);
-
-      setErrorMessage(
-        "Unable to load show timings.",
-      );
-    } finally {
-      setLoadingShows(false);
-    }
-  };
-
-  /* ==========================================================
-     LOAD LIVE SEATS
-  ========================================================== */
-
-  const selectShow = async (
-    show: Show,
-  ) => {
-    if (!token) {
-      return;
-    }
-
-    setSelectedShow(show);
-    setSelectedSeats([]);
-
-    try {
-      setLoadingSeats(true);
-      setErrorMessage("");
-
-      const result =
-        await fetchSeats(
-          show.id,
-          token,
-        );
-
-      setSeats(result);
-    } catch (error) {
-      console.error(
-        "Seat loading error:",
-        error,
-      );
-
-      setSeats([]);
-
-      setErrorMessage(
-        "Unable to load live seat availability.",
-      );
-    } finally {
-      setLoadingSeats(false);
-    }
-  };
-
-  /* ==========================================================
-     SEAT SELECTION
-  ========================================================== */
-
-  const toggleSeat = (
-    seat: Seat,
-  ) => {
-    if (
-      seat.status !== "AVAILABLE"
-    ) {
-      return;
-    }
-
-    setSelectedSeats(
-      (current) => {
-        if (
-          current.includes(seat.id)
-        ) {
-          return current.filter(
-            (id) => id !== seat.id,
-          );
-        }
-
-        if (current.length >= 8) {
-          Alert.alert(
-            "Seat limit",
-            "You can select up to 8 seats.",
+        const seatMap =
+          await fetchMovieSeats(
+            show.id,
+            token,
           );
 
-          return current;
+        if (!seatMap) {
+          setSeats([]);
+          setErrorMessage(
+            "Seat map is unavailable.",
+          );
+          return;
         }
 
-        return [
-          ...current,
-          seat.id,
-        ];
-      },
-    );
-  };
-
-  /* ==========================================================
-     REFRESH LIVE SEATS
-  ========================================================== */
-
-  const refreshSeats = async () => {
-    if (
-      !token ||
-      !selectedShow
-    ) {
-      return;
-    }
-
-    try {
-      setLoadingSeats(true);
-
-      const result =
-        await fetchSeats(
-          selectedShow.id,
-          token,
+        setSeats(
+          Array.isArray(
+            seatMap.seats,
+          )
+            ? seatMap.seats
+            : [],
+        );
+      } catch (error) {
+        console.error(
+          "Seat loading error:",
+          error,
         );
 
-      setSeats(result);
+        setSeats([]);
+        setErrorMessage(
+          "Unable to load live seat availability.",
+        );
+      } finally {
+        setLoadingSeats(false);
+      }
+    };
 
-      /*
-       * Remove seats from local selection if they
-       * became unavailable on the latest server check.
-       */
+  /* ==========================================================
+     REFRESH SEATS
+  ========================================================== */
+
+  const refreshSeats =
+    async () => {
+      if (
+        !token ||
+        !selectedShow
+      ) {
+        return;
+      }
+
+      try {
+        setLoadingSeats(true);
+
+        const seatMap =
+          await fetchMovieSeats(
+            selectedShow.id,
+            token,
+          );
+
+        const latestSeats =
+          seatMap?.seats ?? [];
+
+        setSeats(
+          latestSeats,
+        );
+
+        setSelectedSeats(
+          (current) =>
+            current.filter(
+              (id) =>
+                latestSeats.some(
+                  (seat) =>
+                    seat.id === id &&
+                    seat.status ===
+                      "AVAILABLE",
+                ),
+            ),
+        );
+      } catch (error) {
+        console.error(
+          "Seat refresh error:",
+          error,
+        );
+      } finally {
+        setLoadingSeats(false);
+      }
+    };
+
+  /* ==========================================================
+     TOGGLE SEAT
+  ========================================================== */
+
+  const toggleSeat =
+    (seat: MovieSeat) => {
+      if (
+        seat.status !==
+        "AVAILABLE"
+      ) {
+        return;
+      }
 
       setSelectedSeats(
-        (current) =>
-          current.filter(
-            (id) =>
-              result.some(
-                (seat) =>
-                  seat.id === id &&
-                  seat.status ===
-                    "AVAILABLE",
-              ),
-          ),
+        (current) => {
+          if (
+            current.includes(
+              seat.id,
+            )
+          ) {
+            return current.filter(
+              (id) =>
+                id !== seat.id,
+            );
+          }
+
+          if (
+            current.length >= 8
+          ) {
+            Alert.alert(
+              "Seat limit",
+              "You can select up to 8 seats.",
+            );
+
+            return current;
+          }
+
+          return [
+            ...current,
+            seat.id,
+          ];
+        },
       );
-    } catch (error) {
-      console.error(
-        "Seat refresh error:",
-        error,
+    };
+
+  /* ==========================================================
+     SEAT ROWS
+  ========================================================== */
+
+  const seatRows =
+    useMemo(() => {
+      const grouped: Record<
+        string,
+        MovieSeat[]
+      > = {};
+
+      for (const seat of seats) {
+        if (
+          !grouped[seat.row]
+        ) {
+          grouped[seat.row] =
+            [];
+        }
+
+        grouped[
+          seat.row
+        ].push(seat);
+      }
+
+      return Object.entries(
+        grouped,
+      ).sort(
+        ([a], [b]) =>
+          a.localeCompare(b),
       );
-    } finally {
-      setLoadingSeats(false);
-    }
-  };
+    }, [seats]);
 
   /* ==========================================================
      TOTAL
@@ -619,162 +654,124 @@ export function MovieBookingScreen({
 
   const totalAmount =
     selectedSeatObjects.reduce(
-      (sum, seat) =>
-        sum + Number(seat.price || 0),
+      (
+        total,
+        seat,
+      ) =>
+        total +
+        Number(
+          seat.price || 0,
+        ),
       0,
     );
 
   /* ==========================================================
-     HOLD + CONTINUE
+     HOLD SEATS
   ========================================================== */
 
-  const handleContinue = async () => {
-    if (!selectedMovie) {
-      Alert.alert(
-        "Select movie",
-        "Please select a movie first.",
-      );
-      return;
-    }
-
-    if (!selectedTheatre) {
-      Alert.alert(
-        "Select theatre",
-        "Please select a theatre.",
-      );
-      return;
-    }
-
-    if (!selectedShow) {
-      Alert.alert(
-        "Select show",
-        "Please select a show time.",
-      );
-      return;
-    }
-
-    if (
-      selectedSeats.length === 0
-    ) {
-      Alert.alert(
-        "Select seats",
-        "Please select at least one available seat.",
-      );
-      return;
-    }
-
-    if (!token) {
-      Alert.alert(
-        "Login required",
-        "Please login again.",
-      );
-      return;
-    }
-
-    try {
-      setHoldingSeats(true);
-
-      /*
-       * Final server-side check / temporary hold.
-       *
-       * This prevents two users from selecting
-       * the same seats at the same time.
-       */
-
-      const hold =
-        await holdSeats(
-          selectedShow.id,
-          selectedSeats,
-          token,
+  const handleContinue =
+    async () => {
+      if (
+        !selectedMovie ||
+        !selectedTheatre ||
+        !selectedShow
+      ) {
+        Alert.alert(
+          "Incomplete selection",
+          "Please select movie, theatre and show.",
         );
-
-      Alert.alert(
-        "Seats held successfully",
-        [
-          `Movie: ${selectedMovie.title}`,
-          `Theatre: ${selectedTheatre.name}`,
-          `Show: ${selectedShow.time}`,
-          `Seats: ${selectedSeatObjects
-            .map((seat) => seat.label)
-            .join(", ")}`,
-          `Total: ₹${totalAmount}`,
-          "",
-          hold.expiresAt
-            ? `Hold expires: ${hold.expiresAt}`
-            : "Seats are temporarily reserved.",
-        ].join("\n"),
-        [
-          {
-            text: "OK",
-            onPress: () => {
-              /*
-               * Payment/booking screen can be connected here.
-               *
-               * Example:
-               * navigation.navigate("MoviePayment", {
-               *   holdId: hold.holdId
-               * });
-               */
-            },
-          },
-        ],
-      );
-    } catch (error) {
-      console.error(
-        "Seat hold error:",
-        error,
-      );
-
-      /*
-       * Most important case:
-       * another user may have taken a seat
-       * between the last refresh and this request.
-       */
-
-      await refreshSeats();
-
-      Alert.alert(
-        "Seats no longer available",
-        "One or more selected seats are no longer available. We refreshed the seat map. Please select again.",
-      );
-    } finally {
-      setHoldingSeats(false);
-    }
-  };
-
-  /* ==========================================================
-     GROUP SEATS BY ROW
-  ========================================================== */
-
-  const seatRows = useMemo(() => {
-    const grouped: Record<
-      string,
-      Seat[]
-    > = {};
-
-    for (const seat of seats) {
-      if (!grouped[seat.row]) {
-        grouped[seat.row] = [];
+        return;
       }
 
-      grouped[seat.row].push(
-        seat,
-      );
-    }
+      if (
+        selectedSeats.length ===
+        0
+      ) {
+        Alert.alert(
+          "Select seats",
+          "Please select at least one available seat.",
+        );
+        return;
+      }
 
-    return Object.entries(
-      grouped,
-    ).sort(([a], [b]) =>
-      a.localeCompare(b),
-    );
-  }, [seats]);
+      if (!token) {
+        Alert.alert(
+          "Login required",
+          "Please login again.",
+        );
+        return;
+      }
+
+      try {
+        setHoldingSeats(true);
+
+        const hold =
+          await holdMovieSeats(
+            selectedShow.id,
+            selectedSeats,
+            token,
+          );
+
+        Alert.alert(
+          "Seats held successfully",
+          [
+            `Movie: ${selectedMovie.title}`,
+            `Theatre: ${selectedTheatre.name}`,
+            `Show: ${formatTime(
+              selectedShow.startTime,
+            )}`,
+            `Seats: ${selectedSeatObjects
+              .map(
+                (seat) =>
+                  seat.label,
+              )
+              .join(", ")}`,
+            `Total: ₹${totalAmount}`,
+            "",
+            `Hold expires: ${new Date(
+              hold.expiresAt,
+            ).toLocaleTimeString(
+              "en-IN",
+              {
+                hour: "numeric",
+                minute: "2-digit",
+                hour12: true,
+              },
+            )}`,
+          ].join("\n"),
+        );
+
+        await refreshSeats();
+      } catch (error) {
+        console.error(
+          "Seat hold error:",
+          error,
+        );
+
+        await refreshSeats();
+
+        const message =
+          error instanceof Error
+            ? error.message
+            : "One or more selected seats are no longer available.";
+
+        Alert.alert(
+          "Unable to hold seats",
+          message,
+        );
+      } finally {
+        setHoldingSeats(false);
+      }
+    };
 
   /* ==========================================================
      UI
   ========================================================== */
 
   return (
-    <View style={styles.screen}>
+    <View
+      style={styles.screen}
+    >
       <ScrollView
         showsVerticalScrollIndicator={
           false
@@ -785,10 +782,14 @@ export function MovieBookingScreen({
       >
         {/* HEADER */}
 
-        <View style={styles.header}>
+        <View
+          style={styles.header}
+        >
           <Pressable
             onPress={onBack}
-            style={styles.backButton}
+            style={
+              styles.backButton
+            }
           >
             <Text
               style={
@@ -800,9 +801,9 @@ export function MovieBookingScreen({
           </Pressable>
 
           <View
-            style={{
-              flex: 1,
-            }}
+            style={
+              styles.headerMiddle
+            }
           >
             <Text
               style={
@@ -822,14 +823,18 @@ export function MovieBookingScreen({
           </View>
 
           <Pressable
-            onPress={refreshSeats}
+            onPress={
+              refreshSeats
+            }
             disabled={
               !selectedShow ||
               loadingSeats
             }
-            style={
-              styles.refreshButton
-            }
+            style={[
+              styles.refreshButton,
+              !selectedShow &&
+                styles.refreshDisabled,
+            ]}
           >
             <Text
               style={
@@ -841,14 +846,18 @@ export function MovieBookingScreen({
           </Pressable>
         </View>
 
-        {/* LOCATION */}
+        {/* CITY */}
 
         <View
           style={
             styles.locationCard
           }
         >
-          <View>
+          <View
+            style={
+              styles.cityArea
+            }
+          >
             <Text
               style={
                 styles.smallLabel
@@ -867,6 +876,7 @@ export function MovieBookingScreen({
               }
               placeholder="Enter city"
               placeholderTextColor="#9A9DA8"
+              autoCapitalize="words"
               style={
                 styles.cityInput
               }
@@ -891,7 +901,7 @@ export function MovieBookingScreen({
           </Pressable>
         </View>
 
-        {/* DATE */}
+        {/* DATES */}
 
         <Text
           style={
@@ -991,7 +1001,11 @@ export function MovieBookingScreen({
               styles.sectionTitle
             }
           >
-            MOVIES IN {city.toUpperCase()}
+            {city.trim()
+              ? `MOVIES IN ${city
+                  .trim()
+                  .toUpperCase()}`
+              : "MOVIES"}
           </Text>
 
           {loadingMovies && (
@@ -1003,25 +1017,11 @@ export function MovieBookingScreen({
         </View>
 
         {loadingMovies ? (
-          <View
-            style={
-              styles.loadingCard
-            }
-          >
-            <ActivityIndicator
-              size="large"
-              color="#E7A400"
-            />
-
-            <Text
-              style={
-                styles.loadingText
-              }
-            >
-              Finding movies...
-            </Text>
-          </View>
-        ) : movies.length === 0 ? (
+          <LoadingCard
+            text="Finding movies..."
+          />
+        ) : movies.length ===
+          0 ? (
           <View
             style={
               styles.emptyCard
@@ -1048,7 +1048,7 @@ export function MovieBookingScreen({
                 styles.emptyText
               }
             >
-              Try another city or date.
+              Enter a city and tap Search.
             </Text>
           </View>
         ) : (
@@ -1087,9 +1087,9 @@ export function MovieBookingScreen({
                   </View>
 
                   <View
-                    style={{
-                      flex: 1,
-                    }}
+                    style={
+                      styles.flexOne
+                    }
                   >
                     <Text
                       style={
@@ -1104,28 +1104,20 @@ export function MovieBookingScreen({
                         styles.movieMeta
                       }
                     >
-                      {[
-                        movie.language,
-                        movie.certificate,
-                        movie.genre,
-                      ]
-                        .filter(
-                          Boolean,
-                        )
-                        .join(
-                          " • ",
-                        )}
+                      {movie.language}
+                      {" • "}
+                      {movie.genre}
                     </Text>
 
-                    {movie.durationMinutes ? (
-                      <Text
-                        style={
-                          styles.duration
-                        }
-                      >
-                        {movie.durationMinutes} min
-                      </Text>
-                    ) : null}
+                    <Text
+                      style={
+                        styles.duration
+                      }
+                    >
+                      {movie.durationMinutes} min
+                      {" • "}
+                      ⭐ {movie.rating}
+                    </Text>
                   </View>
 
                   <Text
@@ -1158,7 +1150,7 @@ export function MovieBookingScreen({
                 THEATRES
               </Text>
 
-              {loadingTheatres && (
+              {loadingShows && (
                 <ActivityIndicator
                   size="small"
                   color="#E7A400"
@@ -1166,26 +1158,12 @@ export function MovieBookingScreen({
               )}
             </View>
 
-            {loadingTheatres ? (
-              <View
-                style={
-                  styles.loadingCard
-                }
-              >
-                <ActivityIndicator
-                  size="small"
-                  color="#E7A400"
-                />
-
-                <Text
-                  style={
-                    styles.loadingText
-                  }
-                >
-                  Finding nearby theatres...
-                </Text>
-              </View>
-            ) : theatres.length === 0 ? (
+            {loadingShows ? (
+              <LoadingCard
+                text="Finding theatres and shows..."
+              />
+            ) : theatres.length ===
+              0 ? (
               <View
                 style={
                   styles.emptyCard
@@ -1205,6 +1183,13 @@ export function MovieBookingScreen({
                   const selected =
                     selectedTheatre?.id ===
                     theatre.id;
+
+                  const theatreShowCount =
+                    shows.filter(
+                      (show) =>
+                        show.theatre.id ===
+                        theatre.id,
+                    ).length;
 
                   return (
                     <Pressable
@@ -1237,9 +1222,9 @@ export function MovieBookingScreen({
                       </View>
 
                       <View
-                        style={{
-                          flex: 1,
-                        }}
+                        style={
+                          styles.flexOne
+                        }
                       >
                         <Text
                           style={
@@ -1249,32 +1234,21 @@ export function MovieBookingScreen({
                           {theatre.name}
                         </Text>
 
-                        {!!theatre.address && (
-                          <Text
-                            style={
-                              styles.theatreAddress
-                            }
-                            numberOfLines={
-                              2
-                            }
-                          >
-                            {theatre.address}
-                          </Text>
-                        )}
+                        <Text
+                          style={
+                            styles.theatreAddress
+                          }
+                        >
+                          {theatre.address}
+                        </Text>
 
-                        {theatre.distanceKm !=
-                          null && (
-                          <Text
-                            style={
-                              styles.distance
-                            }
-                          >
-                            {theatre.distanceKm.toFixed(
-                              1,
-                            )}{" "}
-                            km away
-                          </Text>
-                        )}
+                        <Text
+                          style={
+                            styles.showCount
+                          }
+                        >
+                          {theatreShowCount} shows available
+                        </Text>
                       </View>
 
                       <Text
@@ -1308,35 +1282,10 @@ export function MovieBookingScreen({
               >
                 SHOW TIMES
               </Text>
-
-              {loadingShows && (
-                <ActivityIndicator
-                  size="small"
-                  color="#E7A400"
-                />
-              )}
             </View>
 
-            {loadingShows ? (
-              <View
-                style={
-                  styles.loadingCard
-                }
-              >
-                <ActivityIndicator
-                  size="small"
-                  color="#E7A400"
-                />
-
-                <Text
-                  style={
-                    styles.loadingText
-                  }
-                >
-                  Loading show timings...
-                </Text>
-              </View>
-            ) : shows.length === 0 ? (
+            {theatreShows.length ===
+            0 ? (
               <View
                 style={
                   styles.emptyCard
@@ -1356,7 +1305,7 @@ export function MovieBookingScreen({
                   styles.showGrid
                 }
               >
-                {shows.map(
+                {theatreShows.map(
                   (show) => {
                     const selected =
                       selectedShow?.id ===
@@ -1385,34 +1334,32 @@ export function MovieBookingScreen({
                               styles.showTimeSelected,
                           ]}
                         >
-                          {show.time}
+                          {formatTime(
+                            show.startTime,
+                          )}
                         </Text>
 
-                        {!!show.format && (
-                          <Text
-                            style={[
-                              styles.showFormat,
-                              selected &&
-                                styles.showFormatSelected,
-                            ]}
-                          >
-                            {show.format}
-                          </Text>
-                        )}
+                        <Text
+                          style={[
+                            styles.showFormat,
+                            selected &&
+                              styles.showFormatSelected,
+                          ]}
+                        >
+                          {show.screenName}
+                        </Text>
 
-                        {show.price !=
-                          null && (
-                          <Text
-                            style={[
-                              styles.showPrice,
-                              selected &&
-                                styles.showPriceSelected,
-                            ]}
-                          >
-                            ₹
-                            {show.price}
-                          </Text>
-                        )}
+                        <Text
+                          style={[
+                            styles.showPrice,
+                            selected &&
+                              styles.showPriceSelected,
+                          ]}
+                        >
+                          ₹{show.priceFrom}
+                          {" • "}
+                          {show.availableSeats} seats
+                        </Text>
                       </Pressable>
                     );
                   },
@@ -1460,20 +1407,20 @@ export function MovieBookingScreen({
               }
             >
               <Legend
-                color="#FFFFFF"
+                background="#FFFFFF"
                 border="#D8D1C5"
                 label="Available"
               />
 
               <Legend
-                color="#E7A400"
+                background="#E7A400"
                 border="#E7A400"
                 label="Selected"
               />
 
               <Legend
-                color="#D5D5D5"
-                border="#D5D5D5"
+                background="#D8D8D8"
+                border="#D8D8D8"
                 label="Booked"
               />
             </View>
@@ -1488,30 +1435,16 @@ export function MovieBookingScreen({
                   styles.screenText
                 }
               >
-                SCREEN
+                {selectedShow.screenName.toUpperCase()}
               </Text>
             </View>
 
             {loadingSeats ? (
-              <View
-                style={
-                  styles.loadingCard
-                }
-              >
-                <ActivityIndicator
-                  size="large"
-                  color="#E7A400"
-                />
-
-                <Text
-                  style={
-                    styles.loadingText
-                  }
-                >
-                  Checking live seat availability...
-                </Text>
-              </View>
-            ) : seats.length === 0 ? (
+              <LoadingCard
+                text="Checking live seat availability..."
+              />
+            ) : seats.length ===
+              0 ? (
               <View
                 style={
                   styles.emptyCard
@@ -1530,7 +1463,7 @@ export function MovieBookingScreen({
                     styles.emptyText
                   }
                 >
-                  Please refresh and try again.
+                  Tap Refresh and try again.
                 </Text>
               </View>
             ) : (
@@ -1601,9 +1534,7 @@ export function MovieBookingScreen({
                                       styles.seatTextUnavailable,
                                   ]}
                                 >
-                                  {
-                                    seat.number
-                                  }
+                                  {seat.number}
                                 </Text>
                               </Pressable>
                             );
@@ -1624,22 +1555,20 @@ export function MovieBookingScreen({
               }
             >
               <View
-                style={{
-                  flex: 1,
-                }}
+                style={
+                  styles.flexOne
+                }
               >
                 <Text
                   style={
                     styles.summaryTitle
                   }
                 >
-                  {selectedSeats.length}{" "}
-                  seat
+                  {selectedSeats.length} seat
                   {selectedSeats.length ===
                   1
                     ? ""
-                    : "s"}{" "}
-                  selected
+                    : "s"} selected
                 </Text>
 
                 <Text
@@ -1653,9 +1582,7 @@ export function MovieBookingScreen({
                       (seat) =>
                         seat.label,
                     )
-                    .join(
-                      ", ",
-                    ) ||
+                    .join(", ") ||
                     "Select available seats"}
                 </Text>
               </View>
@@ -1680,13 +1607,11 @@ export function MovieBookingScreen({
                 selectedSeats.length ===
                   0
               }
-              style={({ pressed }) => [
+              style={[
                 styles.bookButton,
                 selectedSeats.length ===
                   0 &&
                   styles.bookButtonDisabled,
-                pressed &&
-                  styles.bookButtonPressed,
               ]}
             >
               {holdingSeats ? (
@@ -1729,15 +1654,46 @@ export function MovieBookingScreen({
 }
 
 /* ============================================================
+   LOADING CARD
+============================================================ */
+
+function LoadingCard({
+  text,
+}: {
+  text: string;
+}) {
+  return (
+    <View
+      style={
+        styles.loadingCard
+      }
+    >
+      <ActivityIndicator
+        size="large"
+        color="#E7A400"
+      />
+
+      <Text
+        style={
+          styles.loadingText
+        }
+      >
+        {text}
+      </Text>
+    </View>
+  );
+}
+
+/* ============================================================
    LEGEND
 ============================================================ */
 
 function Legend({
-  color,
+  background,
   border,
   label,
 }: {
-  color: string;
+  background: string;
   border: string;
   label: string;
 }) {
@@ -1752,7 +1708,7 @@ function Legend({
           styles.legendDot,
           {
             backgroundColor:
-              color,
+              background,
             borderColor:
               border,
           },
@@ -1774,585 +1730,646 @@ function Legend({
    STYLES
 ============================================================ */
 
-const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: "#F8F6F1",
-  },
-
-  container: {
-    padding: 20,
-    paddingBottom: 60,
-  },
-
-  header: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 20,
-  },
-
-  backButton: {
-    width: 46,
-    height: 46,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E7E0D4",
-  },
-
-  backText: {
-    fontSize: 25,
-    fontWeight: "800",
-    color: "#152238",
-  },
-
-  headerTitle: {
-    fontSize: 22,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  headerSub: {
-    marginTop: 3,
-    fontSize: 11,
-    color: "#717489",
-  },
-
-  refreshButton: {
-    width: 42,
-    height: 42,
-    borderRadius: 13,
-    backgroundColor: "#FFFFFF",
-    alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: "#E7E0D4",
-  },
-
-  refreshText: {
-    fontSize: 24,
-    fontWeight: "800",
-    color: "#E7A400",
-  },
-
-  locationCard: {
-    padding: 15,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E7E0D4",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    marginBottom: 22,
-  },
-
-  smallLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1.3,
-    color: "#E7A400",
-  },
-
-  cityInput: {
-    width: 220,
-    marginTop: 2,
-    paddingVertical: 2,
-    fontSize: 16,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  searchButton: {
-    minHeight: 42,
-    paddingHorizontal: 16,
-    borderRadius: 12,
-    backgroundColor: "#E7A400",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  searchButtonText: {
-    color: "#FFFFFF",
-    fontSize: 12,
-    fontWeight: "900",
-  },
-
-  sectionHeader: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  sectionTitle: {
-    marginTop: 5,
-    marginBottom: 12,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 1.4,
-    color: "#E7A400",
-  },
-
-  dateList: {
-    gap: 9,
-    paddingBottom: 20,
-  },
-
-  dateButton: {
-    minHeight: 42,
-    paddingHorizontal: 14,
-    borderRadius: 13,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-    justifyContent: "center",
-  },
-
-  dateButtonSelected: {
-    backgroundColor: "#E7A400",
-    borderColor: "#E7A400",
-  },
-
-  dateText: {
-    fontSize: 11,
-    fontWeight: "800",
-    color: "#152238",
-  },
-
-  dateTextSelected: {
-    color: "#FFFFFF",
-  },
-
-  errorCard: {
-    padding: 14,
-    borderRadius: 15,
-    backgroundColor: "#FFF0EE",
-    borderWidth: 1,
-    borderColor: "#F1B6AE",
-    marginBottom: 16,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 10,
-  },
-
-  errorText: {
-    flex: 1,
-    fontSize: 11,
-    lineHeight: 17,
-    color: "#B52D22",
-    fontWeight: "700",
-  },
-
-  retryText: {
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#B52D22",
-  },
-
-  loadingCard: {
-    minHeight: 100,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E7E0D4",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 9,
-    marginBottom: 12,
-  },
-
-  loadingText: {
-    fontSize: 11,
-    color: "#717489",
-    fontWeight: "700",
-  },
-
-  emptyCard: {
-    minHeight: 110,
-    padding: 20,
-    borderRadius: 18,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E7E0D4",
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 14,
-  },
-
-  emptyIcon: {
-    fontSize: 30,
-    marginBottom: 5,
-  },
-
-  emptyTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#152238",
-    textAlign: "center",
-  },
-
-  emptyText: {
-    marginTop: 5,
-    fontSize: 11,
-    color: "#717489",
-    textAlign: "center",
-  },
-
-  movieCard: {
-    minHeight: 78,
-    padding: 12,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-
-  movieCardSelected: {
-    borderWidth: 2,
-    borderColor: "#E7A400",
-  },
-
-  moviePoster: {
-    width: 52,
-    height: 64,
-    borderRadius: 12,
-    backgroundColor: "#FCE8E7",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  posterEmoji: {
-    fontSize: 25,
-  },
-
-  movieTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  movieMeta: {
-    marginTop: 4,
-    fontSize: 10,
-    color: "#717489",
-  },
-
-  duration: {
-    marginTop: 4,
-    fontSize: 10,
-    fontWeight: "700",
-    color: "#A66F00",
-  },
-
-  chevron: {
-    fontSize: 25,
-    color: "#8B8F9A",
-  },
-
-  theatreCard: {
-    minHeight: 78,
-    padding: 13,
-    borderRadius: 17,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#E2DDD4",
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 12,
-    marginBottom: 10,
-  },
-
-  theatreSelected: {
-    borderWidth: 2,
-    borderColor: "#E7A400",
-  },
-
-  theatreIcon: {
-    width: 48,
-    height: 48,
-    borderRadius: 14,
-    backgroundColor: "#FFF2D3",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  theatreEmoji: {
-    fontSize: 23,
-  },
-
-  theatreName: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  theatreAddress: {
-    marginTop: 4,
-    fontSize: 10,
-    lineHeight: 15,
-    color: "#717489",
-  },
-
-  distance: {
-    marginTop: 4,
-    fontSize: 10,
-    fontWeight: "800",
-    color: "#159A63",
-  },
-
-  showGrid: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    gap: 10,
-    marginBottom: 10,
-  },
-
-  showButton: {
-    minWidth: 105,
-    minHeight: 64,
-    paddingHorizontal: 10,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#DDD7CD",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  showSelected: {
-    backgroundColor: "#E7A400",
-    borderColor: "#E7A400",
-  },
-
-  showTime: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: "#152238",
-  },
-
-  showTimeSelected: {
-    color: "#FFFFFF",
-  },
-
-  showFormat: {
-    marginTop: 3,
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#717489",
-  },
-
-  showFormatSelected: {
-    color: "#FFF8E8",
-  },
-
-  showPrice: {
-    marginTop: 3,
-    fontSize: 9,
-    fontWeight: "800",
-    color: "#A66F00",
-  },
-
-  showPriceSelected: {
-    color: "#FFFFFF",
-  },
-
-  refreshLabel: {
-    marginBottom: 12,
-    fontSize: 11,
-    fontWeight: "900",
-    color: "#A66F00",
-  },
-
-  legend: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "center",
-    gap: 16,
-    marginBottom: 16,
-  },
-
-  legendItem: {
-    flexDirection: "row",
-    alignItems: "center",
-    gap: 6,
-  },
-
-  legendDot: {
-    width: 16,
-    height: 16,
-    borderRadius: 5,
-    borderWidth: 1,
-  },
-
-  legendText: {
-    fontSize: 9,
-    fontWeight: "700",
-    color: "#717489",
-  },
-
-  screenLabel: {
-    height: 32,
-    marginHorizontal: 20,
-    marginBottom: 22,
-    borderRadius: 8,
-    backgroundColor: "#171C2B",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  screenText: {
-    color: "#FFFFFF",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 2.5,
-  },
-
-  seatMap: {
-    paddingVertical: 15,
-    paddingHorizontal: 8,
-    borderRadius: 20,
-    backgroundColor: "#F0ECE4",
-    borderWidth: 1,
-    borderColor: "#E0D8CB",
-    marginBottom: 16,
-  },
-
-  seatRow: {
-    minHeight: 48,
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 5,
-  },
-
-  rowLabel: {
-    width: 25,
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#717489",
-  },
-
-  rowSeats: {
-    flex: 1,
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    gap: 7,
-  },
-
-  seat: {
-    width: 35,
-    height: 32,
-    borderRadius: 8,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: "#D8D1C5",
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  seatSelected: {
-    backgroundColor: "#E7A400",
-    borderColor: "#E7A400",
-  },
-
-  seatUnavailable: {
-    backgroundColor: "#D8D8D8",
-    borderColor: "#D8D8D8",
-    opacity: 0.7,
-  },
-
-  seatText: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: "#555B6E",
-  },
-
-  seatTextSelected: {
-    color: "#FFFFFF",
-  },
-
-  seatTextUnavailable: {
-    color: "#888888",
-  },
-
-  summary: {
-    minHeight: 78,
-    padding: 17,
-    borderRadius: 18,
-    backgroundColor: "#171C2B",
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    gap: 15,
-    marginBottom: 12,
-  },
-
-  summaryTitle: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  summarySeats: {
-    marginTop: 5,
-    color: "#BFC4D0",
-    fontSize: 10,
-  },
-
-  total: {
-    color: "#E7A400",
-    fontSize: 21,
-    fontWeight: "900",
-  },
-
-  bookButton: {
-    minHeight: 56,
-    borderRadius: 16,
-    backgroundColor: "#E7A400",
-    paddingHorizontal: 18,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-  },
-
-  bookButtonDisabled: {
-    backgroundColor: "#BDB9B0",
-  },
-
-  bookButtonPressed: {
-    opacity: 0.82,
-    transform: [
-      {
-        scale: 0.99,
-      },
-    ],
-  },
-
-  bookText: {
-    color: "#FFFFFF",
-    fontSize: 14,
-    fontWeight: "900",
-  },
-
-  bookArrow: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "900",
-  },
-
-  securityText: {
-    marginTop: 10,
-    textAlign: "center",
-    fontSize: 9,
-    color: "#717489",
-    fontWeight: "700",
-  },
-});
+const styles =
+  StyleSheet.create({
+    screen: {
+      flex: 1,
+      backgroundColor:
+        "#F8F6F1",
+    },
+
+    container: {
+      padding: 20,
+      paddingBottom: 60,
+    },
+
+    header: {
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 20,
+    },
+
+    headerMiddle: {
+      flex: 1,
+      marginHorizontal: 12,
+    },
+
+    backButton: {
+      width: 46,
+      height: 46,
+      borderRadius: 14,
+      backgroundColor:
+        "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor:
+        "#E7E0D4",
+    },
+
+    backText: {
+      fontSize: 25,
+      fontWeight: "800",
+      color: "#152238",
+    },
+
+    headerTitle: {
+      fontSize: 22,
+      fontWeight: "900",
+      color: "#152238",
+    },
+
+    headerSub: {
+      marginTop: 3,
+      fontSize: 11,
+      color: "#717489",
+    },
+
+    refreshButton: {
+      width: 42,
+      height: 42,
+      borderRadius: 13,
+      backgroundColor:
+        "#FFFFFF",
+      alignItems: "center",
+      justifyContent: "center",
+      borderWidth: 1,
+      borderColor:
+        "#E7E0D4",
+    },
+
+    refreshDisabled: {
+      opacity: 0.45,
+    },
+
+    refreshText: {
+      fontSize: 24,
+      fontWeight: "800",
+      color: "#E7A400",
+    },
+
+    locationCard: {
+      padding: 15,
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E7E0D4",
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 22,
+    },
+
+    cityArea: {
+      flex: 1,
+    },
+
+    smallLabel: {
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 1.3,
+      color: "#E7A400",
+    },
+
+    cityInput: {
+      marginTop: 2,
+      paddingVertical: 2,
+      paddingRight: 10,
+      fontSize: 16,
+      fontWeight: "900",
+      color: "#152238",
+    },
+
+    searchButton: {
+      minHeight: 42,
+      paddingHorizontal: 16,
+      borderRadius: 12,
+      backgroundColor:
+        "#E7A400",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    searchButtonText: {
+      color: "#FFFFFF",
+      fontSize: 12,
+      fontWeight: "900",
+    },
+
+    sectionHeader: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    sectionTitle: {
+      marginTop: 5,
+      marginBottom: 12,
+      fontSize: 10,
+      fontWeight: "900",
+      letterSpacing: 1.4,
+      color: "#E7A400",
+    },
+
+    dateList: {
+      gap: 9,
+      paddingBottom: 20,
+    },
+
+    dateButton: {
+      minHeight: 42,
+      paddingHorizontal: 14,
+      borderRadius: 13,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E2DDD4",
+      justifyContent:
+        "center",
+    },
+
+    dateButtonSelected: {
+      backgroundColor:
+        "#E7A400",
+      borderColor:
+        "#E7A400",
+    },
+
+    dateText: {
+      fontSize: 11,
+      fontWeight: "800",
+      color: "#152238",
+    },
+
+    dateTextSelected: {
+      color: "#FFFFFF",
+    },
+
+    errorCard: {
+      padding: 14,
+      borderRadius: 15,
+      backgroundColor:
+        "#FFF0EE",
+      borderWidth: 1,
+      borderColor:
+        "#F1B6AE",
+      marginBottom: 16,
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    errorText: {
+      flex: 1,
+      fontSize: 11,
+      lineHeight: 17,
+      color: "#B52D22",
+      fontWeight: "700",
+      marginRight: 10,
+    },
+
+    retryText: {
+      fontSize: 11,
+      fontWeight: "900",
+      color: "#B52D22",
+    },
+
+    loadingCard: {
+      minHeight: 110,
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E7E0D4",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginBottom: 14,
+    },
+
+    loadingText: {
+      marginTop: 10,
+      fontSize: 11,
+      color: "#717489",
+      fontWeight: "700",
+    },
+
+    emptyCard: {
+      minHeight: 110,
+      padding: 20,
+      borderRadius: 18,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E7E0D4",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      marginBottom: 14,
+    },
+
+    emptyIcon: {
+      fontSize: 30,
+      marginBottom: 5,
+    },
+
+    emptyTitle: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: "#152238",
+      textAlign: "center",
+    },
+
+    emptyText: {
+      marginTop: 5,
+      fontSize: 11,
+      color: "#717489",
+      textAlign: "center",
+    },
+
+    movieCard: {
+      minHeight: 78,
+      padding: 12,
+      borderRadius: 17,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E2DDD4",
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 10,
+    },
+
+    movieCardSelected: {
+      borderWidth: 2,
+      borderColor:
+        "#E7A400",
+    },
+
+    moviePoster: {
+      width: 52,
+      height: 64,
+      borderRadius: 12,
+      backgroundColor:
+        "#FCE8E7",
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+
+    posterEmoji: {
+      fontSize: 25,
+    },
+
+    flexOne: {
+      flex: 1,
+    },
+
+    movieTitle: {
+      fontSize: 15,
+      fontWeight: "900",
+      color: "#152238",
+    },
+
+    movieMeta: {
+      marginTop: 4,
+      fontSize: 10,
+      color: "#717489",
+    },
+
+    duration: {
+      marginTop: 4,
+      fontSize: 10,
+      fontWeight: "700",
+      color: "#A66F00",
+    },
+
+    chevron: {
+      fontSize: 25,
+      color: "#8B8F9A",
+      marginLeft: 8,
+    },
+
+    theatreCard: {
+      minHeight: 78,
+      padding: 13,
+      borderRadius: 17,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#E2DDD4",
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 10,
+    },
+
+    theatreSelected: {
+      borderWidth: 2,
+      borderColor:
+        "#E7A400",
+    },
+
+    theatreIcon: {
+      width: 48,
+      height: 48,
+      borderRadius: 14,
+      backgroundColor:
+        "#FFF2D3",
+      alignItems: "center",
+      justifyContent: "center",
+      marginRight: 12,
+    },
+
+    theatreEmoji: {
+      fontSize: 23,
+    },
+
+    theatreName: {
+      fontSize: 14,
+      fontWeight: "900",
+      color: "#152238",
+    },
+
+    theatreAddress: {
+      marginTop: 4,
+      fontSize: 10,
+      lineHeight: 15,
+      color: "#717489",
+    },
+
+    showCount: {
+      marginTop: 4,
+      fontSize: 10,
+      fontWeight: "800",
+      color: "#159A63",
+    },
+
+    showGrid: {
+      flexDirection: "row",
+      flexWrap: "wrap",
+      gap: 10,
+      marginBottom: 12,
+    },
+
+    showButton: {
+      minWidth: 105,
+      minHeight: 68,
+      paddingHorizontal: 10,
+      borderRadius: 14,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#DDD7CD",
+      alignItems: "center",
+      justifyContent:
+        "center",
+    },
+
+    showSelected: {
+      backgroundColor:
+        "#E7A400",
+      borderColor:
+        "#E7A400",
+    },
+
+    showTime: {
+      fontSize: 13,
+      fontWeight: "900",
+      color: "#152238",
+    },
+
+    showTimeSelected: {
+      color: "#FFFFFF",
+    },
+
+    showFormat: {
+      marginTop: 3,
+      fontSize: 9,
+      fontWeight: "800",
+      color: "#717489",
+    },
+
+    showFormatSelected: {
+      color: "#FFF8E8",
+    },
+
+    showPrice: {
+      marginTop: 3,
+      fontSize: 8,
+      fontWeight: "800",
+      color: "#A66F00",
+      textAlign: "center",
+    },
+
+    showPriceSelected: {
+      color: "#FFFFFF",
+    },
+
+    refreshLabel: {
+      marginBottom: 12,
+      fontSize: 11,
+      fontWeight: "900",
+      color: "#A66F00",
+    },
+
+    legend: {
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "center",
+      gap: 16,
+      marginBottom: 16,
+    },
+
+    legendItem: {
+      flexDirection: "row",
+      alignItems: "center",
+    },
+
+    legendDot: {
+      width: 16,
+      height: 16,
+      borderRadius: 5,
+      borderWidth: 1,
+      marginRight: 6,
+    },
+
+    legendText: {
+      fontSize: 9,
+      fontWeight: "700",
+      color: "#717489",
+    },
+
+    screenLabel: {
+      height: 32,
+      marginHorizontal: 20,
+      marginBottom: 22,
+      borderRadius: 8,
+      backgroundColor:
+        "#171C2B",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    screenText: {
+      color: "#FFFFFF",
+      fontSize: 9,
+      fontWeight: "900",
+      letterSpacing: 2.5,
+    },
+
+    seatMap: {
+      paddingVertical: 15,
+      paddingHorizontal: 8,
+      borderRadius: 20,
+      backgroundColor:
+        "#F0ECE4",
+      borderWidth: 1,
+      borderColor:
+        "#E0D8CB",
+      marginBottom: 16,
+    },
+
+    seatRow: {
+      minHeight: 48,
+      flexDirection: "row",
+      alignItems: "center",
+      marginBottom: 5,
+    },
+
+    rowLabel: {
+      width: 25,
+      fontSize: 10,
+      fontWeight: "900",
+      color: "#717489",
+    },
+
+    rowSeats: {
+      flex: 1,
+      flexDirection: "row",
+      flexWrap: "wrap",
+      justifyContent:
+        "center",
+      gap: 7,
+    },
+
+    seat: {
+      width: 35,
+      height: 32,
+      borderRadius: 8,
+      backgroundColor:
+        "#FFFFFF",
+      borderWidth: 1,
+      borderColor:
+        "#D8D1C5",
+      alignItems: "center",
+      justifyContent: "center",
+    },
+
+    seatSelected: {
+      backgroundColor:
+        "#E7A400",
+      borderColor:
+        "#E7A400",
+    },
+
+    seatUnavailable: {
+      backgroundColor:
+        "#D8D8D8",
+      borderColor:
+        "#D8D8D8",
+      opacity: 0.7,
+    },
+
+    seatText: {
+      fontSize: 10,
+      fontWeight: "900",
+      color: "#555B6E",
+    },
+
+    seatTextSelected: {
+      color: "#FFFFFF",
+    },
+
+    seatTextUnavailable: {
+      color: "#888888",
+    },
+
+    summary: {
+      minHeight: 78,
+      padding: 17,
+      borderRadius: 18,
+      backgroundColor:
+        "#171C2B",
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+      marginBottom: 12,
+    },
+
+    summaryTitle: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    summarySeats: {
+      marginTop: 5,
+      color: "#BFC4D0",
+      fontSize: 10,
+    },
+
+    total: {
+      color: "#E7A400",
+      fontSize: 21,
+      fontWeight: "900",
+      marginLeft: 12,
+    },
+
+    bookButton: {
+      minHeight: 56,
+      borderRadius: 16,
+      backgroundColor:
+        "#E7A400",
+      paddingHorizontal: 18,
+      flexDirection: "row",
+      alignItems: "center",
+      justifyContent:
+        "space-between",
+    },
+
+    bookButtonDisabled: {
+      backgroundColor:
+        "#BDB9B0",
+    },
+
+    bookText: {
+      color: "#FFFFFF",
+      fontSize: 14,
+      fontWeight: "900",
+    },
+
+    bookArrow: {
+      color: "#FFFFFF",
+      fontSize: 22,
+      fontWeight: "900",
+    },
+
+    securityText: {
+      marginTop: 10,
+      textAlign: "center",
+      fontSize: 9,
+      color: "#717489",
+      fontWeight: "700",
+    },
+  });
+
+export default MovieBookingScreen;

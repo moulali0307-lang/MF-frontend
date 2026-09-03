@@ -1,23 +1,14 @@
 // MF Rides Backend API
 
-// Web browser running on the same computer:
-// http://localhost:4000
-//
-// Android emulator:
-// http://10.0.2.2:4000
-//
-// Physical device on the same Wi-Fi:
-// http://192.168.1.8:4000
-
 const DEFAULT_API_URL = "http://localhost:4000";
 
 export const API_BASE_URL =
-  process.env.EXPO_PUBLIC_API_URL || DEFAULT_API_URL;
+  process.env.EXPO_PUBLIC_API_URL?.trim() || DEFAULT_API_URL;
 
 export class ApiError extends Error {
-  status: number;
+  status?: number;
 
-  constructor(message: string, status: number) {
+  constructor(message: string, status?: number) {
     super(message);
     this.name = "ApiError";
     this.status = status;
@@ -30,58 +21,114 @@ interface RequestOptions {
   token?: string | null;
 }
 
+interface ApiResponse<T> {
+  success?: boolean;
+  message?: string;
+  data?: T;
+  error?: string;
+  [key: string]: unknown;
+}
+
 export async function apiRequest<T>(
-  path: string,
-  options: RequestOptions = {},
+  endpoint: string,
+  options: RequestOptions = {}
 ): Promise<T> {
-  const { method = "GET", body, token } = options;
+  const {
+    method = "GET",
+    body,
+    token,
+  } = options;
 
-  const headers: Record<string, string> = {
-    "Content-Type": "application/json",
-  };
+  const cleanEndpoint = endpoint.startsWith("/")
+    ? endpoint
+    : `/${endpoint}`;
 
-  if (token) {
-    headers.Authorization = `Bearer ${token}`;
-  }
+  const url = `${API_BASE_URL}${cleanEndpoint}`;
 
-  let response: Response;
+  console.log(`🌐 API ${method}:`, url);
+
+  const controller = new AbortController();
+
+  const timeout = setTimeout(() => {
+    controller.abort();
+  }, 15000);
 
   try {
-    response = await fetch(`${API_BASE_URL}${path}`, {
+    const response = await fetch(url, {
       method,
-      headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
+      headers: {
+        Accept: "application/json",
+        "Content-Type": "application/json",
+        ...(token
+          ? { Authorization: `Bearer ${token}` }
+          : {}),
+      },
+      body:
+        body !== undefined
+          ? JSON.stringify(body)
+          : undefined,
+      signal: controller.signal,
     });
-  } catch (error) {
-    console.error("API NETWORK ERROR:", error);
+
+    const text = await response.text();
+
+    let result: ApiResponse<T> | T | null = null;
+
+    if (text) {
+      try {
+        result = JSON.parse(text);
+      } catch {
+        throw new ApiError(
+          "Server returned invalid JSON.",
+          response.status
+        );
+      }
+    }
+
+    console.log(
+      `🌐 API Response ${response.status}:`,
+      result
+    );
+
+    if (!response.ok) {
+      const message =
+        typeof result === "object" &&
+        result !== null &&
+        "message" in result
+          ? String(result.message)
+          : `Request failed with status ${response.status}`;
+
+      throw new ApiError(message, response.status);
+    }
+
+    // Backend may return:
+    // { success: true, data: ... }
+    if (
+      typeof result === "object" &&
+      result !== null &&
+      "data" in result
+    ) {
+      return (result as ApiResponse<T>).data as T;
+    }
+
+    return result as T;
+  } catch (error: any) {
+    if (error?.name === "AbortError") {
+      throw new ApiError(
+        "Request timed out. Please try again."
+      );
+    }
+
+    if (error instanceof ApiError) {
+      throw error;
+    }
+
+    console.error("❌ API Error:", error);
 
     throw new ApiError(
-      "Can't reach the MF Rides server. Check your connection and try again.",
-      0,
+      "Unable to connect to MF Rides server."
     );
+  } finally {
+    clearTimeout(timeout);
   }
-
-  let payload: unknown = null;
-
-  try {
-    payload = await response.json();
-  } catch {
-    payload = null;
-  }
-
-  const parsed = payload as {
-    success?: boolean;
-    message?: string;
-    data?: T;
-  } | null;
-
-  if (!response.ok || !parsed?.success) {
-    const message =
-      parsed?.message ||
-      `Request failed with status ${response.status}.`;
-
-    throw new ApiError(message, response.status);
-  }
-
-  return parsed.data as T;
 }

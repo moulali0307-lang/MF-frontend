@@ -19,7 +19,7 @@ import { MoreServicesScreen } from "./src/screens/MoreServicesScreen";
 import { BusBookingScreen } from "./src/screens/BusBookingScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { TrainBookingScreen } from "./src/screens/TrainBookingScreen";
-import { MovieBookingScreen } from "./src/screens/MovieBookingScreen";
+import  MovieBookingScreen  from "./src/screens/MovieBookingScreen";
 import { RechargeScreen } from "./src/screens/RechargeScreen";
 
 import { colors } from "./src/theme/colors";
