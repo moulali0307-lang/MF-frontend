@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
+  Image,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -878,50 +879,67 @@ export default function App() {
           contentContainerStyle={styles.loginContent}
           keyboardShouldPersistTaps="handled"
         >
-          <View style={styles.topGlow} />
+          <View style={styles.heroSection}>
+            <Image
+              source={require("./assets/partner-hero-full.png")}
+              style={styles.heroBackground}
+              resizeMode="cover"
+            />
 
-          <View style={styles.brandRow}>
-            <View style={styles.brandMark}>
-              <Text style={styles.brandMarkText}>MF</Text>
+            <View style={styles.heroSecurePill}>
+              <View style={styles.heroSecureDot} />
+              <Text style={styles.heroSecureText}>SECURE</Text>
             </View>
 
-            <View>
-              <Text style={styles.brandName}>MF-RIDES</Text>
-              <Text style={styles.brandTagline}>One app. Every journey.</Text>
-            </View>
+            <View style={styles.heroTextBlock}>
+                <Text style={styles.heroEyebrow}>
+                  WELCOME TO MF-RIDES
+                </Text>
 
-            <View style={styles.securePill}>
-              <View style={styles.secureDot} />
-              <Text style={styles.secureText}>SECURE</Text>
-            </View>
-          </View>
+                <Text style={styles.heroTitle}>
+                  Partner
+                </Text>
 
-          <View style={styles.heroRow}>
-            <View style={styles.heroCopy}>
-              <Text style={styles.eyebrow}>WELCOME TO MF-RIDES</Text>
+                <Text style={styles.heroTitleGold}>
+                  journey starts here.
+                </Text>
 
-              <Text style={styles.heroTitle}>
-                Partner
-              </Text>
-              <Text style={styles.heroTitleGold}>
-                journey starts here.
-              </Text>
+                <Text style={styles.heroSubtitle}>
+                  Login to receive nearby ride requests,
+                  {`\n`}
+                  accept trips and earn with MF-Rides.
+                </Text>
 
-              <Text style={styles.heroSubtitle}>
-                Login to receive nearby ride requests,
-                accept trips and earn with MF-Rides.
-              </Text>
-            </View>
+                <View style={styles.heroBenefits}>
+                  <View style={styles.heroBenefit}>
+                    <View style={styles.heroBenefitIcon}>
+                      <Text style={styles.heroBenefitIconText}>₹</Text>
+                    </View>
+                    <Text style={styles.heroBenefitText}>
+                      More{`\n`}Earnings
+                    </Text>
+                  </View>
 
-            <View style={styles.heroVisual}>
-              <Text style={styles.heroCar}>🚕</Text>
-              <Text style={styles.heroBike}>🏍️</Text>
-              <View style={styles.roadLine} />
-              <View style={styles.locationPin}>
-                <Text style={styles.locationPinText}>●</Text>
+                  <View style={styles.heroBenefit}>
+                    <View style={styles.heroBenefitIcon}>
+                      <Text style={styles.heroBenefitIconText}>●</Text>
+                    </View>
+                    <Text style={styles.heroBenefitText}>
+                      Nearby{`\n`}Requests
+                    </Text>
+                  </View>
+
+                  <View style={styles.heroBenefit}>
+                    <View style={styles.heroBenefitIcon}>
+                      <Text style={styles.heroBenefitIconText}>●●</Text>
+                    </View>
+                    <Text style={styles.heroBenefitText}>
+                      Be Your{`\n`}Own Boss
+                    </Text>
+                  </View>
+                </View>
               </View>
             </View>
-          </View>
 
           <View style={styles.loginCard}>
             <Text style={styles.cardEyebrow}>
@@ -1169,110 +1187,173 @@ export default function App() {
   }
 
   // ============================================================
-  // ============================================================
   // PARTNER HOME
   // ============================================================
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView
+      style={styles.container}
+    >
       <StatusBar style="dark" />
 
       <ScrollView
-        showsVerticalScrollIndicator={false}
-        contentContainerStyle={styles.dashboardContent}
+        contentContainerStyle={
+          styles.content
+        }
       >
-        <View style={styles.dashboardHeader}>
-          <View style={styles.dashboardBrand}>
-            <View style={styles.dashboardLogo}>
-              <Text style={styles.dashboardLogoText}>MF</Text>
-            </View>
+        <View
+          style={styles.headerRow}
+        >
+          <View>
+            <Text style={styles.logo}>
+              MF Rides
+            </Text>
 
-            <View>
-              <Text style={styles.dashboardBrandName}>MF RIDES</Text>
-              <Text style={styles.dashboardBrandTagline}>
-                One app. Every journey.
-              </Text>
-            </View>
-          </View>
+            <Text style={styles.title}>
+              MF Partner
+            </Text>
 
-          <View style={styles.profileArea}>
-            <View style={styles.profileIcon}>
-              <Text style={styles.profileIconText}>●</Text>
-            </View>
-
-            <View style={styles.profileTextWrap}>
-              <Text style={styles.profileWelcome}>Welcome back,</Text>
-              <Text style={styles.profileName}>
-                {partnerName || "Partner"}
-              </Text>
-            </View>
-
-            <Pressable
-              style={styles.profileChevron}
-              onPress={logout}
+            <Text
+              style={styles.subtitle}
             >
-              <Text style={styles.profileChevronText}>⌄</Text>
-            </Pressable>
+              Welcome, {partnerName}
+            </Text>
           </View>
+
+          <Pressable
+            style={
+              styles.logoutButton
+            }
+            onPress={logout}
+          >
+            <Text
+              style={styles.logoutText}
+            >
+              Logout
+            </Text>
+          </Pressable>
         </View>
 
         {message ? (
-          <View style={styles.messageBox}>
-            <Text style={styles.messageText}>{message}</Text>
+          <View
+            style={styles.messageBox}
+          >
+            <Text
+              style={
+                styles.messageText
+              }
+            >
+              {message}
+            </Text>
           </View>
         ) : null}
 
-        {activeRide ? (
-          <View style={styles.activeDashboardCard}>
-            <View style={styles.dashboardSectionHeader}>
-              <View>
-                <Text style={styles.dashboardEyebrow}>
-                  ACTIVE RIDE
-                </Text>
-                <Text style={styles.activeRideTitle}>
-                  Ride in progress
-                </Text>
-              </View>
+        {/* ======================================================
+            ACTIVE RIDE
+        ======================================================= */}
 
-              <View style={styles.activeStatusPill}>
-                <View style={styles.activeStatusDot} />
-                <Text style={styles.activeStatusText}>
-                  {activeRide.status}
-                </Text>
-              </View>
+        {activeRide ? (
+          <View
+            style={styles.rideCard}
+          >
+            <View
+              style={styles.statusRow}
+            >
+              <Text
+                style={styles.status}
+              >
+                {activeRide.status}
+              </Text>
+
+              <Text
+                style={styles.time}
+              >
+                {new Date(
+                  activeRide.requestedAt,
+                ).toLocaleTimeString()}
+              </Text>
             </View>
 
-            <Text style={styles.passenger}>
-              Passenger: {activeRide.passenger?.fullName ?? "Passenger"}
+            <Text
+              style={styles.passenger}
+            >
+              Passenger:{" "}
+              {activeRide.passenger
+                ?.fullName ??
+                "Passenger"}
             </Text>
 
-            <Text style={styles.locationLabel}>PICKUP</Text>
-            <Text style={styles.location}>
+            <Text
+              style={
+                styles.locationLabel
+              }
+            >
+              PICKUP
+            </Text>
+
+            <Text
+              style={styles.location}
+            >
               {activeRide.pickupAddress}
             </Text>
 
-            <Text style={styles.locationLabel}>DESTINATION</Text>
-            <Text style={styles.location}>
+            <Text
+              style={
+                styles.locationLabel
+              }
+            >
+              DESTINATION
+            </Text>
+
+            <Text
+              style={styles.location}
+            >
               {activeRide.destinationAddress}
             </Text>
 
-            {activeRide.status === "ACCEPTED" ? (
-              <View style={styles.otpBox}>
-                <Text style={styles.otpTitle}>🔐 Passenger OTP</Text>
-                <Text style={styles.otpSubtitle}>
-                  Ask the passenger for the 4-digit OTP shown in
+            {/* ==================================================
+                ACCEPTED + OTP
+            =================================================== */}
+
+            {activeRide.status ===
+            "ACCEPTED" ? (
+              <View
+                style={styles.otpBox}
+              >
+                <Text
+                  style={styles.otpTitle}
+                >
+                  🔐 Passenger OTP
+                </Text>
+
+                <Text
+                  style={
+                    styles.otpSubtitle
+                  }
+                >
+                  Ask the passenger for
+                  the 4-digit OTP shown in
                   their MF Rider app.
                 </Text>
 
                 <TextInput
-                  style={styles.otpInput}
+                  style={
+                    styles.otpInput
+                  }
                   placeholder="Enter 4-digit OTP"
                   placeholderTextColor="#888"
                   value={otp}
-                  onChangeText={(value) => {
-                    const digits = value
-                      .replace(/[^0-9]/g, "")
-                      .slice(0, 4);
+                  onChangeText={(
+                    value,
+                  ) => {
+                    const digits =
+                      value
+                        .replace(
+                          /[^0-9]/g,
+                          "",
+                        )
+                        .slice(0, 4);
+
                     setOtp(digits);
                   }}
                   keyboardType="number-pad"
@@ -1282,12 +1363,24 @@ export default function App() {
                 <Pressable
                   style={[
                     styles.acceptButton,
-                    otp.length !== 4 && styles.disabledButton,
+                    otp.length !== 4 &&
+                      styles.disabledButton,
                   ]}
-                  onPress={() => startRide(activeRide.id)}
-                  disabled={loading || otp.length !== 4}
+                  onPress={() =>
+                    startRide(
+                      activeRide.id,
+                    )
+                  }
+                  disabled={
+                    loading ||
+                    otp.length !== 4
+                  }
                 >
-                  <Text style={styles.acceptText}>
+                  <Text
+                    style={
+                      styles.acceptText
+                    }
+                  >
                     {loading
                       ? "Verifying..."
                       : "Verify OTP & Start Ride"}
@@ -1296,113 +1389,92 @@ export default function App() {
               </View>
             ) : null}
 
-            {activeRide.status === "STARTED" ? (
+            {/* ==================================================
+                STARTED
+            =================================================== */}
+
+            {activeRide.status ===
+            "STARTED" ? (
               <Pressable
-                style={styles.acceptButton}
-                onPress={() => completeRide(activeRide.id)}
+                style={
+                  styles.acceptButton
+                }
+                onPress={() =>
+                  completeRide(
+                    activeRide.id,
+                  )
+                }
                 disabled={loading}
               >
-                <Text style={styles.acceptText}>
-                  {loading ? "Please wait..." : "Complete Ride"}
+                <Text
+                  style={
+                    styles.acceptText
+                  }
+                >
+                  {loading
+                    ? "Please wait..."
+                    : "Complete Ride"}
                 </Text>
               </Pressable>
             ) : null}
 
-            {activeRide.status === "COMPLETED" ? (
-              <Pressable
-                style={styles.refreshButton}
-                onPress={finishActiveRide}
-              >
-                <Text style={styles.refreshText}>
-                  Back to Available Rides
+            {/* ==================================================
+                COMPLETED
+            =================================================== */}
+
+            {activeRide.status ===
+            "COMPLETED" ? (
+              <>
+                <Text
+                  style={
+                    styles.emptyTitle
+                  }
+                >
+                  🏁 Ride Completed
                 </Text>
-              </Pressable>
+
+                <Pressable
+                  style={
+                    styles.refreshButton
+                  }
+                  onPress={
+                    finishActiveRide
+                  }
+                >
+                  <Text
+                    style={
+                      styles.refreshText
+                    }
+                  >
+                    Back to Available Rides
+                  </Text>
+                </Pressable>
+              </>
             ) : null}
           </View>
         ) : (
           <>
-            <View style={styles.welcomeDashboardRow}>
-              <View style={styles.welcomeCopy}>
-                <Text style={styles.dashboardEyebrow}>
-                  PARTNER DASHBOARD
-                </Text>
-
-                <Text style={styles.dashboardHeroTitle}>
-                  Good to see you,
-                </Text>
-
-                <Text style={styles.dashboardHeroName}>
-                  {partnerName || "Partner"}! 👋
-                </Text>
-
-                <Text style={styles.dashboardHeroSubtitle}>
-                  Stay online to receive ride requests
-                  and earn more with MF Rides.
-                </Text>
-
-                <View style={styles.statsRow}>
-                  <View style={styles.statCard}>
-                    <View style={styles.statIconGold}>
-                      <Text style={styles.statIconText}>▰</Text>
-                    </View>
-
-                    <View>
-                      <Text style={styles.statValue}>0</Text>
-                      <Text style={styles.statTitle}>Total Rides</Text>
-                      <Text style={styles.statCaption}>Completed</Text>
-                    </View>
-                  </View>
-
-                  <View style={styles.statCard}>
-                    <View style={styles.statIconGreen}>
-                      <Text style={styles.statIconTextGreen}>₹</Text>
-                    </View>
-
-                    <View>
-                      <Text style={styles.statValue}>0.00</Text>
-                      <Text style={styles.statTitle}>Earnings</Text>
-                      <Text style={styles.statCaption}>This week</Text>
-                    </View>
-                  </View>
-                </View>
-              </View>
-
-              <View style={styles.dashboardVisual}>
-                <View style={styles.visualSkyCircle} />
-                <Text style={styles.visualCloud}>☁</Text>
-                <Text style={styles.visualCity}>▥ ▦ ▥ ▦ ▥</Text>
-                <Text style={styles.visualPin}>📍</Text>
-                <Text style={styles.visualCar}>🚕</Text>
-                <Text style={styles.visualBike}>🏍️</Text>
-                <View style={styles.visualRoad} />
-              </View>
-            </View>
-
-            <View style={styles.noRequestsBanner}>
-              <View style={styles.notificationCircle}>
-                <Text style={styles.notificationText}>●</Text>
-              </View>
-
-              <View style={styles.noRequestsCopy}>
-                <Text style={styles.noRequestsTitle}>
-                  No available ride requests
-                </Text>
-                <Text style={styles.noRequestsSubtitle}>
-                  New ride requests from riders will appear here.
-                </Text>
-              </View>
-
-              <Text style={styles.routeDecoration}>⌁⌁⌁</Text>
-            </View>
+            {/* ==================================================
+                AVAILABLE RIDES
+            =================================================== */}
 
             <Pressable
-              style={styles.refreshButton}
-              onPress={() => loadAvailableRides()}
+              style={
+                styles.refreshButton
+              }
+              onPress={() =>
+                loadAvailableRides()
+              }
               disabled={loading}
             >
-              <Text style={styles.refreshIcon}>⟳</Text>
-              <Text style={styles.refreshText}>
-                {loading ? "Loading..." : "Refresh Ride Requests"}
+              <Text
+                style={
+                  styles.refreshText
+                }
+              >
+                {loading
+                  ? "Loading..."
+                  : "Refresh Ride Requests"}
               </Text>
             </Pressable>
 
@@ -1413,55 +1485,113 @@ export default function App() {
               />
             ) : null}
 
-            {!loading && rides.length === 0 ? (
-              <View style={styles.emptyDashboardCard}>
-                <View style={styles.emptyIconCircle}>
-                  <Text style={styles.emptyIcon}>▱</Text>
-                  <View style={styles.emptySpark}>✦</View>
-                </View>
-
-                <Text style={styles.emptyTitle}>
+            {!loading &&
+            rides.length === 0 ? (
+              <View
+                style={styles.emptyBox}
+              >
+                <Text
+                  style={
+                    styles.emptyTitle
+                  }
+                >
                   No ride requests
                 </Text>
 
-                <Text style={styles.emptyText}>
-                  New rider requests will appear here.
+                <Text
+                  style={
+                    styles.emptyText
+                  }
+                >
+                  New rider requests will
+                  appear here.
                 </Text>
               </View>
             ) : null}
 
             {rides.map((ride) => (
-              <View key={ride.id} style={styles.rideCard}>
-                <View style={styles.statusRow}>
-                  <Text style={styles.status}>{ride.status}</Text>
-                  <Text style={styles.time}>
+              <View
+                key={ride.id}
+                style={styles.rideCard}
+              >
+                <View
+                  style={
+                    styles.statusRow
+                  }
+                >
+                  <Text
+                    style={styles.status}
+                  >
+                    {ride.status}
+                  </Text>
+
+                  <Text
+                    style={styles.time}
+                  >
                     {new Date(
                       ride.requestedAt,
                     ).toLocaleTimeString()}
                   </Text>
                 </View>
 
-                <Text style={styles.passenger}>
-                  Passenger: {ride.passenger?.fullName ?? "Passenger"}
+                <Text
+                  style={
+                    styles.passenger
+                  }
+                >
+                  Passenger:{" "}
+                  {ride.passenger
+                    ?.fullName ??
+                    "Passenger"}
                 </Text>
 
-                <Text style={styles.locationLabel}>PICKUP</Text>
-                <Text style={styles.location}>
+                <Text
+                  style={
+                    styles.locationLabel
+                  }
+                >
+                  PICKUP
+                </Text>
+
+                <Text
+                  style={styles.location}
+                >
                   {ride.pickupAddress}
                 </Text>
 
-                <Text style={styles.locationLabel}>DESTINATION</Text>
-                <Text style={styles.location}>
+                <Text
+                  style={
+                    styles.locationLabel
+                  }
+                >
+                  DESTINATION
+                </Text>
+
+                <Text
+                  style={styles.location}
+                >
                   {ride.destinationAddress}
                 </Text>
 
                 <Pressable
-                  style={styles.acceptButton}
-                  onPress={() => acceptRide(ride.id)}
+                  style={
+                    styles.acceptButton
+                  }
+                  onPress={() =>
+                    acceptRide(
+                      ride.id,
+                    )
+                  }
                   disabled={loading}
                 >
-                  <Text style={styles.acceptText}>
-                    {loading ? "Please wait..." : "Accept Ride"}
+                  <Text
+                    style={
+                      styles.acceptText
+                    }
+                  >
+                    {loading
+                      ? "Please wait..."
+                      : "Accept Ride"}
                   </Text>
                 </Pressable>
               </View>
@@ -1491,209 +1621,150 @@ const colors = {
 };
 
 const styles = StyleSheet.create({
-    // ---------------- LOGIN FEATURES ----------------
-  featureRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-around",
-    marginTop: 24,
-    paddingVertical: 16,
-    paddingHorizontal: 8,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-  },
-
-  featureItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  featureIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 7,
-  },
-
-  featureTitle: {
-    color: colors.navy,
-    fontSize: 11,
-    fontWeight: "900",
-  },
-
-  featureText: {
-    color: colors.muted,
-    fontSize: 9,
-    marginTop: 2,
-    textAlign: "center",
-  },
-
-  featureDivider: {
-    width: 1,
-    height: 42,
-    backgroundColor: colors.border,
-  },
-
-  footerText: {
-    color: colors.muted,
-    fontSize: 10,
-    textAlign: "center",
-    marginTop: 18,
-    marginBottom: 8,
-  },
   container: {
     flex: 1,
     backgroundColor: colors.background,
   },
 
-  // ---------------- LOGIN ----------------
   loginContent: {
-    paddingHorizontal: 24,
-    paddingTop: 24,
+    paddingTop: 0,
     paddingBottom: 36,
   },
-  topGlow: {
-    position: "absolute",
-    top: -80,
-    right: -80,
-    width: 210,
-    height: 210,
-    borderRadius: 105,
-    backgroundColor: "#FFF0C7",
-  },
-  brandRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 64,
-  },
-  brandMark: {
-    width: 58,
-    height: 58,
-    borderRadius: 18,
-    backgroundColor: colors.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 14,
-  },
-  brandMarkText: {
-    color: "#FFFFFF",
-    fontSize: 26,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  brandName: {
-    color: colors.navy,
-    fontSize: 20,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
-  brandTagline: {
-    color: colors.muted,
-    fontSize: 11,
-    marginTop: 3,
-  },
-  securePill: {
-    marginLeft: "auto",
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 20,
-    paddingHorizontal: 12,
-    paddingVertical: 9,
-  },
-  secureDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.green,
-    marginRight: 6,
-  },
-  secureText: {
-    color: "#5E624F",
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
-  },
-  heroRow: {
-    flexDirection: "row",
-    alignItems: "center",
-    marginTop: 34,
-    marginBottom: 26,
-    minHeight: 190,
-  },
-  heroCopy: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  eyebrow: {
-    color: colors.goldDark,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2,
-    marginBottom: 10,
-  },
-  heroTitle: {
-    color: colors.navy,
-    fontSize: 31,
-    lineHeight: 35,
-    fontWeight: "900",
-  },
-  heroTitleGold: {
-    color: colors.goldDark,
-    fontSize: 31,
-    lineHeight: 35,
-    fontWeight: "900",
-  },
-  heroSubtitle: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
-    marginTop: 12,
-    maxWidth: 330,
-  },
-  heroVisual: {
-    width: 175,
-    height: 165,
-    borderRadius: 28,
-    backgroundColor: "#FFF0C7",
+
+  heroSection: {
+    width: "100%",
+    height: 500,
+    backgroundColor: "#FFF4D5",
     overflow: "hidden",
-    alignItems: "center",
-    justifyContent: "center",
     position: "relative",
   },
-  heroCar: { fontSize: 70, marginTop: 14, marginLeft: -12 },
-  heroBike: { position: "absolute", right: 8, bottom: 27, fontSize: 42 },
-  roadLine: {
+
+  heroBackground: {
     position: "absolute",
-    left: 18,
-    right: 15,
-    bottom: 22,
-    height: 3,
-    borderRadius: 2,
-    backgroundColor: colors.gold,
-    transform: [{ rotate: "-5deg" }],
+    left: 0,
+    top: 0,
+    width: "100%",
+    height: "100%",
   },
-  locationPin: {
+
+  heroCopy: {
     position: "absolute",
-    top: 15,
-    right: 18,
-    width: 28,
-    height: 28,
-    borderRadius: 14,
-    backgroundColor: "#FFFFFF",
+    left: 0,
+    top: 0,
+    right: 0,
+    bottom: 0,
+    paddingHorizontal: 48,
+    paddingTop: 32,
+  },
+
+  heroSecurePill: {
+    position: "absolute",
+    top: 32,
+    right: 34,
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(255,255,255,0.94)",
+    borderRadius: 24,
+    paddingHorizontal: 17,
+    paddingVertical: 10,
+    shadowColor: "#8D7B55",
+    shadowOpacity: 0.12,
+    shadowRadius: 10,
+    shadowOffset: { width: 0, height: 4 },
+    elevation: 2,
+  },
+
+  heroSecureDot: {
+    width: 9,
+    height: 9,
+    borderRadius: 5,
+    backgroundColor: "#16A66A",
+    marginRight: 8,
+  },
+
+  heroSecureText: {
+    color: "#14213D",
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.8,
+  },
+
+  heroTextBlock: {
+    position: "absolute",
+    left: 48,
+    top: 118,
+    width: 610,
+    maxWidth: "50%",
+  },
+
+  heroEyebrow: {
+    color: "#C47D00",
+    fontSize: 13,
+    fontWeight: "900",
+    letterSpacing: 3,
+    marginBottom: 8,
+  },
+
+  heroTitle: {
+    color: "#14213D",
+    fontSize: 52,
+    lineHeight: 56,
+    fontWeight: "900",
+  },
+
+  heroTitleGold: {
+    color: "#D28A00",
+    fontSize: 52,
+    lineHeight: 56,
+    fontWeight: "900",
+  },
+
+  heroSubtitle: {
+    color: "#536174",
+    fontSize: 18,
+    lineHeight: 27,
+    marginTop: 16,
+    width: 470,
+  },
+
+  heroBenefits: {
+    flexDirection: "row",
+    alignItems: "center",
+    marginTop: 28,
+    gap: 34,
+  },
+
+  heroBenefit: {
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  heroBenefitIcon: {
+    width: 48,
+    height: 48,
+    borderRadius: 24,
+    backgroundColor: "#FFC21C",
     alignItems: "center",
     justifyContent: "center",
+    marginRight: 10,
   },
-  locationPinText: { color: colors.gold, fontSize: 13 },
+
+  heroBenefitIconText: {
+    color: "#14213D",
+    fontSize: 20,
+    fontWeight: "900",
+  },
+
+  heroBenefitText: {
+    color: "#14213D",
+    fontSize: 14,
+    lineHeight: 18,
+    fontWeight: "900",
+  },
+
   loginCard: {
+    marginHorizontal: 44,
+    marginTop: -18,
     backgroundColor: colors.card,
     borderRadius: 26,
     padding: 22,
@@ -1705,18 +1776,21 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 8 },
     elevation: 3,
   },
+
   cardEyebrow: {
     color: colors.goldDark,
     fontSize: 10,
     fontWeight: "900",
     letterSpacing: 1.7,
   },
+
   loginTitle: {
     color: colors.navy,
     fontSize: 24,
     fontWeight: "900",
     marginTop: 7,
   },
+
   loginSubtitle: {
     color: colors.muted,
     fontSize: 13,
@@ -1724,6 +1798,7 @@ const styles = StyleSheet.create({
     marginTop: 5,
     marginBottom: 18,
   },
+
   label: {
     color: "#555967",
     fontSize: 10,
@@ -1732,6 +1807,7 @@ const styles = StyleSheet.create({
     marginTop: 12,
     marginBottom: 7,
   },
+
   phoneField: {
     flexDirection: "row",
     alignItems: "center",
@@ -1741,6 +1817,7 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#FCFBF8",
   },
+
   countryCode: {
     flexDirection: "row",
     alignItems: "center",
@@ -1749,8 +1826,20 @@ const styles = StyleSheet.create({
     borderRightColor: colors.border,
     height: 32,
   },
-  countryFlag: { color: colors.navy, fontSize: 12, fontWeight: "900", marginRight: 6 },
-  countryPlus: { color: colors.navy, fontSize: 14, fontWeight: "800" },
+
+  countryFlag: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: "900",
+    marginRight: 6,
+  },
+
+  countryPlus: {
+    color: colors.navy,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
   phoneInput: {
     flex: 1,
     color: colors.navy,
@@ -1759,23 +1848,13 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     outlineStyle: "none",
   } as any,
-  helperText: { color: "#9A9CA5", fontSize: 10, marginTop: 6 },
-  simpleField: {
-    flexDirection: "row",
-    alignItems: "center",
-    minHeight: 58,
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 15,
-    backgroundColor: "#FCFBF8",
+
+  helperText: {
+    color: "#9A9CA5",
+    fontSize: 10,
+    marginTop: 6,
   },
-  simpleInput: {
-    flex: 1,
-    color: colors.navy,
-    fontSize: 16,
-    paddingHorizontal: 10,
-    paddingVertical: 14,
-  },
+
   passwordField: {
     flexDirection: "row",
     alignItems: "center",
@@ -1785,7 +1864,14 @@ const styles = StyleSheet.create({
     borderRadius: 15,
     backgroundColor: "#FCFBF8",
   },
-  fieldIcon: { color: colors.goldDark, fontSize: 12, marginLeft: 15, marginRight: 4 },
+
+  fieldIcon: {
+    color: colors.goldDark,
+    fontSize: 12,
+    marginLeft: 15,
+    marginRight: 4,
+  },
+
   passwordInput: {
     flex: 1,
     color: colors.navy,
@@ -1794,6 +1880,57 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     outlineStyle: "none",
   } as any,
+
+  simpleField: {
+    flexDirection: "row",
+    alignItems: "center",
+    minHeight: 58,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: 15,
+    backgroundColor: "#FCFBF8",
+  },
+
+  simpleInput: {
+    flex: 1,
+    color: colors.navy,
+    fontSize: 16,
+    paddingHorizontal: 10,
+    paddingVertical: 14,
+  },
+
+  forgotButton: {
+    alignItems: "center",
+    marginTop: 15,
+    paddingVertical: 5,
+  },
+
+  forgotText: {
+    color: colors.goldDark,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  switchRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    justifyContent: "center",
+    alignItems: "center",
+    marginTop: 16,
+    gap: 5,
+  },
+
+  switchText: {
+    color: colors.muted,
+    fontSize: 11,
+  },
+
+  switchLink: {
+    color: colors.goldDark,
+    fontSize: 11,
+    fontWeight: "900",
+  },
+
   loginButton: {
     minHeight: 58,
     marginTop: 22,
@@ -1809,8 +1946,17 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 6 },
     elevation: 4,
   },
-  buttonDisabled: { opacity: 0.65 },
-  loginButtonText: { color: "#FFFFFF", fontSize: 16, fontWeight: "900" },
+
+  buttonDisabled: {
+    opacity: 0.65,
+  },
+
+  loginButtonText: {
+    color: "#FFFFFF",
+    fontSize: 16,
+    fontWeight: "900",
+  },
+
   buttonArrow: {
     position: "absolute",
     right: 7,
@@ -1821,19 +1967,13 @@ const styles = StyleSheet.create({
     alignItems: "center",
     justifyContent: "center",
   },
-  buttonArrowText: { color: "#FFFFFF", fontSize: 23, fontWeight: "800" },
-  forgotButton: { alignItems: "center", marginTop: 15, paddingVertical: 5 },
-  forgotText: { color: colors.goldDark, fontSize: 12, fontWeight: "800" },
-  switchRow: {
-    flexDirection: "row",
-    flexWrap: "wrap",
-    justifyContent: "center",
-    alignItems: "center",
-    marginTop: 16,
-    gap: 5,
+
+  buttonArrowText: {
+    color: "#FFFFFF",
+    fontSize: 23,
+    fontWeight: "800",
   },
-  switchText: { color: colors.muted, fontSize: 11 },
-  switchLink: { color: colors.goldDark, fontSize: 11, fontWeight: "900" },
+
   messageBox: {
     marginTop: 14,
     padding: 12,
@@ -1842,324 +1982,164 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: colors.border,
   },
-  messageText: { color: colors.navy, fontSize: 12, fontWeight: "600", textAlign: "center" },
 
-  // ---------------- DASHBOARD ----------------
-  dashboardContent: {
-    paddingHorizontal: 34,
-    paddingTop: 26,
-    paddingBottom: 48,
-  },
-  dashboardHeader: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    borderWidth: 1,
-    borderColor: colors.border,
-    paddingHorizontal: 20,
-    paddingVertical: 15,
-    flexDirection: "row",
-    alignItems: "center",
-    justifyContent: "space-between",
-    shadowColor: "#B79B68",
-    shadowOpacity: 0.06,
-    shadowRadius: 16,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
-  },
-  dashboardBrand: { flexDirection: "row", alignItems: "center" },
-  dashboardLogo: {
-    width: 54,
-    height: 54,
-    borderRadius: 16,
-    backgroundColor: colors.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 13,
-  },
-  dashboardLogoText: { color: "#FFFFFF", fontSize: 24, fontWeight: "900" },
-  dashboardBrandName: {
+  messageText: {
     color: colors.navy,
-    fontSize: 19,
-    fontWeight: "900",
-    letterSpacing: 3,
-  },
-  dashboardBrandTagline: { color: colors.muted, fontSize: 10, marginTop: 3 },
-  profileArea: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#FFFDF8",
-    borderWidth: 1,
-    borderColor: "#F0E7D6",
-    borderRadius: 18,
-    paddingHorizontal: 10,
-    paddingVertical: 7,
-  },
-  profileIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: colors.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 8,
-  },
-  profileIconText: { color: colors.goldDark, fontSize: 18 },
-  profileTextWrap: { minWidth: 100 },
-  profileWelcome: { color: colors.muted, fontSize: 9 },
-  profileName: { color: colors.navy, fontSize: 13, fontWeight: "900", marginTop: 1 },
-  profileChevron: { paddingHorizontal: 6, paddingVertical: 4 },
-  profileChevronText: { color: colors.navy, fontSize: 18, fontWeight: "900" },
-
-  welcomeDashboardRow: {
-    flexDirection: "row",
-    gap: 28,
-    marginTop: 48,
-    marginBottom: 28,
-    alignItems: "center",
-  },
-  welcomeCopy: { flex: 1 },
-  dashboardEyebrow: {
-    color: colors.goldDark,
-    fontSize: 10,
-    fontWeight: "900",
-    letterSpacing: 2,
-    marginBottom: 8,
-  },
-  dashboardHeroTitle: {
-    color: colors.navy,
-    fontSize: 29,
-    lineHeight: 35,
-    fontWeight: "900",
-  },
-  dashboardHeroName: {
-    color: colors.navy,
-    fontSize: 38,
-    lineHeight: 43,
-    fontWeight: "900",
-  },
-  dashboardHeroSubtitle: {
-    color: colors.muted,
-    fontSize: 14,
-    lineHeight: 21,
-    maxWidth: 460,
-    marginTop: 10,
-  },
-  statsRow: {
-    flexDirection: "row",
-    gap: 14,
-    marginTop: 25,
-  },
-  statCard: {
-    flex: 1,
-    minHeight: 94,
-    maxWidth: 250,
-    backgroundColor: "#FFFFFF",
-    borderWidth: 1,
-    borderColor: colors.border,
-    borderRadius: 18,
-    padding: 14,
-    flexDirection: "row",
-    alignItems: "center",
-    shadowColor: "#B79B68",
-    shadowOpacity: 0.07,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 4 },
-    elevation: 2,
-  },
-  statIconGold: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: colors.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-  },
-  statIconGreen: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
-    backgroundColor: "#EAF7DD",
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 11,
-  },
-  statIconText: { color: colors.goldDark, fontSize: 18 },
-  statIconTextGreen: { color: colors.green, fontSize: 20, fontWeight: "900" },
-  statValue: { color: colors.navy, fontSize: 20, fontWeight: "900" },
-  statTitle: { color: colors.navy, fontSize: 12, fontWeight: "700", marginTop: 1 },
-  statCaption: { color: colors.muted, fontSize: 9, marginTop: 2 },
-
-  dashboardVisual: {
-    width: 46 + 340,
-    maxWidth: 470,
-    height: 220,
-    borderRadius: 27,
-    backgroundColor: "#FFF0C7",
-    overflow: "hidden",
-    position: "relative",
-    alignItems: "center",
-    justifyContent: "flex-end",
-    paddingBottom: 27,
-  },
-  visualSkyCircle: {
-    position: "absolute",
-    top: 28,
-    right: 42,
-    width: 70,
-    height: 70,
-    borderRadius: 35,
-    backgroundColor: "rgba(255,255,255,0.48)",
-  },
-  visualCloud: {
-    position: "absolute",
-    top: 22,
-    left: 90,
-    color: "rgba(255,255,255,0.78)",
-    fontSize: 32,
-  },
-  visualCity: {
-    position: "absolute",
-    bottom: 54,
-    left: 20,
-    right: 20,
-    color: "#F0DDAF",
-    fontSize: 30,
-    letterSpacing: 3,
-  },
-  visualPin: {
-    position: "absolute",
-    top: 44,
-    right: 70,
-    fontSize: 42,
-  },
-  visualCar: { fontSize: 82, marginRight: 80 },
-  visualBike: {
-    position: "absolute",
-    right: 25,
-    bottom: 36,
-    fontSize: 62,
-  },
-  visualRoad: {
-    position: "absolute",
-    left: 22,
-    right: 22,
-    bottom: 22,
-    height: 4,
-    borderRadius: 3,
-    backgroundColor: colors.gold,
+    fontSize: 12,
+    fontWeight: "600",
+    textAlign: "center",
   },
 
-  noRequestsBanner: {
-    minHeight: 112,
-    borderRadius: 22,
-    backgroundColor: "#FFFDF7",
+  featureRow: {
+    marginTop: 22,
+    backgroundColor: "#FFF8E8",
     borderWidth: 1,
     borderColor: "#F0DFC0",
-    paddingHorizontal: 22,
+    borderRadius: 18,
+    minHeight: 82,
     flexDirection: "row",
     alignItems: "center",
-    overflow: "hidden",
+    justifyContent: "space-around",
+    paddingHorizontal: 8,
   },
-  notificationCircle: {
-    width: 60,
-    height: 60,
-    borderRadius: 30,
-    backgroundColor: colors.goldSoft,
+
+  featureItem: {
+    flex: 1,
+    alignItems: "center",
+  },
+
+  featureIcon: {
+    width: 27,
+    height: 27,
+    borderRadius: 14,
+    backgroundColor: "#FFFFFF",
     alignItems: "center",
     justifyContent: "center",
-    marginRight: 16,
+    marginBottom: 4,
   },
-  notificationText: { color: colors.goldDark, fontSize: 24 },
-  noRequestsCopy: { flex: 1 },
-  noRequestsTitle: { color: colors.navy, fontSize: 16, fontWeight: "900" },
-  noRequestsSubtitle: { color: colors.muted, fontSize: 12, marginTop: 5 },
-  routeDecoration: { color: "#F0DDAF", fontSize: 32, letterSpacing: 2 },
+
+  featureTitle: {
+    color: colors.navy,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  featureText: {
+    color: colors.muted,
+    fontSize: 9,
+    marginTop: 2,
+    textAlign: "center",
+  },
+
+  featureDivider: {
+    width: 1,
+    height: 32,
+    backgroundColor: "#E5D5B5",
+  },
+
+  footerText: {
+    color: "#8A8C94",
+    fontSize: 10,
+    textAlign: "center",
+    marginTop: 18,
+  },
+
+  // ============================================================
+  // PARTNER HOME
+  // ============================================================
+
+  content: {
+    padding: 24,
+    paddingTop: 24,
+    paddingBottom: 40,
+  },
+
+  headerRow: {
+    flexDirection: "row",
+    justifyContent: "space-between",
+    alignItems: "center",
+    marginBottom: 8,
+  },
+
+  logo: {
+    color: colors.goldDark,
+    fontSize: 16,
+    fontWeight: "900",
+    letterSpacing: 2,
+  },
+
+  title: {
+    color: colors.navy,
+    fontSize: 30,
+    fontWeight: "900",
+    marginTop: 6,
+  },
+
+  subtitle: {
+    color: colors.muted,
+    fontSize: 14,
+    marginTop: 5,
+    marginBottom: 18,
+  },
+
+  logoutButton: {
+    backgroundColor: "#FFFFFF",
+    borderWidth: 1,
+    borderColor: colors.border,
+    paddingHorizontal: 15,
+    paddingVertical: 11,
+    borderRadius: 14,
+  },
+
+  logoutText: {
+    color: colors.navy,
+    fontSize: 12,
+    fontWeight: "800",
+  },
 
   refreshButton: {
-    minHeight: 58,
-    paddingHorizontal: 18,
-    borderRadius: 17,
+    minHeight: 56,
+    paddingHorizontal: 16,
+    borderRadius: 16,
     backgroundColor: colors.navy,
     alignItems: "center",
     justifyContent: "center",
-    marginTop: 18,
-    marginBottom: 20,
-    flexDirection: "row",
+    marginBottom: 18,
   },
-  refreshIcon: { color: "#FFFFFF", fontSize: 24, marginRight: 10 },
-  refreshText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
-  loader: { marginVertical: 24 },
 
-  emptyDashboardCard: {
-    minHeight: 270,
+  refreshText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  loader: {
+    marginVertical: 24,
+  },
+
+  emptyBox: {
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
     padding: 28,
     alignItems: "center",
-    justifyContent: "center",
-    borderWidth: 1,
-    borderColor: colors.border,
-    shadowColor: "#B79B68",
-    shadowOpacity: 0.06,
-    shadowRadius: 14,
-    shadowOffset: { width: 0, height: 5 },
-    elevation: 2,
-  },
-  emptyIconCircle: {
-    width: 74,
-    height: 74,
-    borderRadius: 37,
-    backgroundColor: colors.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    position: "relative",
-    marginBottom: 16,
-  },
-  emptyIcon: { color: colors.navy, fontSize: 40 },
-  emptySpark: {
-    position: "absolute",
-    top: -4,
-    right: 1,
-    color: colors.goldDark,
-    fontSize: 20,
-  },
-  emptyTitle: { color: colors.navy, fontSize: 22, fontWeight: "900" },
-  emptyText: { marginTop: 8, color: colors.muted, textAlign: "center", fontSize: 13, lineHeight: 20 },
-
-  activeDashboardCard: {
-    backgroundColor: "#FFFFFF",
-    borderRadius: 24,
-    padding: 24,
-    marginTop: 34,
     borderWidth: 1,
     borderColor: colors.border,
   },
-  dashboardSectionHeader: {
-    flexDirection: "row",
-    justifyContent: "space-between",
-    alignItems: "center",
-    marginBottom: 18,
-  },
-  activeRideTitle: { color: colors.navy, fontSize: 23, fontWeight: "900" },
-  activeStatusPill: {
-    flexDirection: "row",
-    alignItems: "center",
-    backgroundColor: "#EAF7DD",
-    borderRadius: 18,
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-  },
-  activeStatusDot: {
-    width: 7,
-    height: 7,
-    borderRadius: 4,
-    backgroundColor: colors.green,
-    marginRight: 6,
-  },
-  activeStatusText: { color: colors.green, fontSize: 10, fontWeight: "900" },
 
-  // ---------------- RIDE / OTP ----------------
+  emptyTitle: {
+    color: colors.navy,
+    fontSize: 21,
+    fontWeight: "900",
+  },
+
+  emptyText: {
+    marginTop: 8,
+    color: colors.muted,
+    textAlign: "center",
+    fontSize: 13,
+    lineHeight: 20,
+  },
+
   rideCard: {
     backgroundColor: "#FFFFFF",
     borderRadius: 22,
@@ -2167,18 +2147,55 @@ const styles = StyleSheet.create({
     marginBottom: 16,
     borderWidth: 1,
     borderColor: colors.border,
+    shadowColor: "#B79B68",
+    shadowOpacity: 0.08,
+    shadowRadius: 14,
+    shadowOffset: { width: 0, height: 5 },
+    elevation: 2,
   },
+
   statusRow: {
     flexDirection: "row",
     justifyContent: "space-between",
     alignItems: "center",
     marginBottom: 13,
   },
-  status: { color: colors.goldDark, fontSize: 11, fontWeight: "900", letterSpacing: 1 },
-  time: { color: "#8B8D96", fontSize: 11 },
-  passenger: { color: colors.navy, fontSize: 16, fontWeight: "800", marginBottom: 16 },
-  locationLabel: { color: colors.goldDark, fontSize: 10, fontWeight: "900", letterSpacing: 1.2, marginTop: 8 },
-  location: { color: colors.navy, fontSize: 15, fontWeight: "600", marginTop: 4, lineHeight: 21 },
+
+  status: {
+    color: colors.goldDark,
+    fontSize: 11,
+    fontWeight: "900",
+    letterSpacing: 1,
+  },
+
+  time: {
+    color: "#8B8D96",
+    fontSize: 11,
+  },
+
+  passenger: {
+    color: colors.navy,
+    fontSize: 16,
+    fontWeight: "800",
+    marginBottom: 16,
+  },
+
+  locationLabel: {
+    color: colors.goldDark,
+    fontSize: 10,
+    fontWeight: "900",
+    letterSpacing: 1.2,
+    marginTop: 8,
+  },
+
+  location: {
+    color: colors.navy,
+    fontSize: 15,
+    fontWeight: "600",
+    marginTop: 4,
+    lineHeight: 21,
+  },
+
   otpBox: {
     marginTop: 20,
     padding: 16,
@@ -2187,8 +2204,20 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     borderColor: "#F0DFC0",
   },
-  otpTitle: { color: colors.navy, fontSize: 18, fontWeight: "900" },
-  otpSubtitle: { color: colors.muted, fontSize: 13, marginTop: 6, lineHeight: 19 },
+
+  otpTitle: {
+    color: colors.navy,
+    fontSize: 18,
+    fontWeight: "900",
+  },
+
+  otpSubtitle: {
+    color: colors.muted,
+    fontSize: 13,
+    marginTop: 6,
+    lineHeight: 19,
+  },
+
   otpInput: {
     marginTop: 14,
     backgroundColor: "#FFFFFF",
@@ -2204,6 +2233,7 @@ const styles = StyleSheet.create({
     color: colors.navy,
     outlineStyle: "none",
   } as any,
+
   acceptButton: {
     backgroundColor: colors.gold,
     minHeight: 54,
@@ -2213,6 +2243,14 @@ const styles = StyleSheet.create({
     justifyContent: "center",
     marginTop: 18,
   },
-  disabledButton: { opacity: 0.45 },
-  acceptText: { color: "#FFFFFF", fontSize: 15, fontWeight: "900" },
+
+  disabledButton: {
+    opacity: 0.45,
+  },
+
+  acceptText: {
+    color: "#FFFFFF",
+    fontSize: 15,
+    fontWeight: "900",
+  },
 });
