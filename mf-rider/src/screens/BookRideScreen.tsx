@@ -3,7 +3,6 @@ import * as Location from "expo-location";
 import {
   ActivityIndicator,
   Alert,
-  FlatList,
   Image,
   Platform,
   Pressable,
@@ -39,7 +38,7 @@ const ACTIVE_STATUSES: Ride["status"][] = [
 const POLL_INTERVAL_MS = 6000;
 
 const GOOGLE_MAPS_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
 
 const mfRidesHero = require("../assets/mf1.png");
 
@@ -65,6 +64,10 @@ interface SelectedPlace {
   address: string;
   latitude: number;
   longitude: number;
+}
+
+function createSessionToken(): string {
+  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function BookRideScreen({
@@ -116,6 +119,10 @@ export function BookRideScreen({
   const destinationSearchTimerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // One autocomplete session token per input field.
+  const pickupSessionTokenRef = useRef<string>(createSessionToken());
+  const destinationSessionTokenRef = useRef<string>(createSessionToken());
+
   // ============================================================
   // RIDE STATE
   // ============================================================
@@ -148,10 +155,11 @@ export function BookRideScreen({
 
   async function searchGooglePlaces(
     input: string,
+    sessionToken?: string,
   ): Promise<PlaceSuggestion[]> {
-    if (!GOOGLE_MAPS_API_KEY) {
+    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === "YOUR_GOOGLE_API_KEY") {
       throw new Error(
-        "Google Maps API key is missing. Add EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to .env.",
+        "Google Maps API key is missing. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in mf-rider/.env and restart Expo.",
       );
     }
 
@@ -175,57 +183,62 @@ export function BookRideScreen({
           input: trimmed,
           includedRegionCodes: ["in"],
           languageCode: "en",
+          ...(sessionToken ? { sessionToken } : {}),
         }),
       },
     );
 
     const data = await response.json();
 
-    console.log(
-      "📍 GOOGLE PLACES STATUS:",
-      response.status,
-    );
+    console.log("📍 GOOGLE PLACES STATUS:", response.status);
 
     if (!response.ok) {
-      console.error(
-        "❌ GOOGLE PLACES ERROR:",
-        data,
-      );
+      console.error("❌ GOOGLE PLACES ERROR:", data);
+
+      const googleMessage =
+        data?.error?.message ||
+        "Google Places Autocomplete request failed.";
 
       throw new Error(
-        data?.error?.message ||
-          "Google Places search failed.",
+        `${googleMessage} Check that Places API (New) is enabled for this API key.`
       );
     }
 
-    const suggestions =
-      Array.isArray(data?.suggestions)
-        ? data.suggestions
-        : [];
+    const suggestions = Array.isArray(data?.suggestions)
+      ? data.suggestions
+      : [];
 
     return suggestions
-      .map((item: any) => {
-        const prediction =
-          item?.placePrediction;
+      .map((item: any): PlaceSuggestion | null => {
+        const prediction = item?.placePrediction;
 
         if (!prediction?.placeId) {
           return null;
         }
 
+        const title =
+          prediction?.structuredFormat?.mainText?.text ||
+          prediction?.text?.text ||
+          "";
+
+        const subtitle =
+          prediction?.structuredFormat?.secondaryText?.text ||
+          "";
+
+        if (!title) {
+          return null;
+        }
+
         return {
           placeId: prediction.placeId,
-          title:
-            prediction?.structuredFormat
-              ?.mainText?.text ||
-            prediction?.text?.text ||
-            "",
-          subtitle:
-            prediction?.structuredFormat
-              ?.secondaryText?.text ||
-            "",
+          title,
+          subtitle,
         };
       })
-      .filter(Boolean);
+      .filter(
+        (item: PlaceSuggestion | null): item is PlaceSuggestion =>
+          item !== null,
+      );
   }
 
   // ============================================================
@@ -234,6 +247,7 @@ export function BookRideScreen({
 
   async function getGooglePlaceDetails(
     placeId: string,
+    sessionToken?: string,
   ): Promise<SelectedPlace> {
     if (!GOOGLE_MAPS_API_KEY) {
       throw new Error(
@@ -244,7 +258,7 @@ export function BookRideScreen({
     const response = await fetch(
       `https://places.googleapis.com/v1/places/${encodeURIComponent(
         placeId,
-      )}`,
+      )}${sessionToken ? `?sessionToken=${encodeURIComponent(sessionToken)}` : ""}`,
       {
         method: "GET",
         headers: {
@@ -359,7 +373,10 @@ export function BookRideScreen({
           setSearchingPickup(true);
 
           const results =
-            await searchGooglePlaces(value);
+            await searchGooglePlaces(
+              value,
+              pickupSessionTokenRef.current,
+            );
 
           setPickupSuggestions(results);
         } catch (error) {
@@ -409,7 +426,10 @@ export function BookRideScreen({
           setSearchingDestination(true);
 
           const results =
-            await searchGooglePlaces(value);
+            await searchGooglePlaces(
+              value,
+              destinationSessionTokenRef.current,
+            );
 
           setDestinationSuggestions(results);
         } catch (error) {
@@ -439,11 +459,14 @@ export function BookRideScreen({
       const place =
         await getGooglePlaceDetails(
           suggestion.placeId,
+          pickupSessionTokenRef.current,
         );
 
       setPickupAddress(place.address);
       setPickupLatitude(place.latitude);
       setPickupLongitude(place.longitude);
+
+      pickupSessionTokenRef.current = createSessionToken();
 
       console.log(
         "📍 PICKUP SELECTED:",
@@ -479,11 +502,14 @@ export function BookRideScreen({
       const place =
         await getGooglePlaceDetails(
           suggestion.placeId,
+          destinationSessionTokenRef.current,
         );
 
       setDestinationAddress(place.address);
       setDestinationLatitude(place.latitude);
       setDestinationLongitude(place.longitude);
+
+      destinationSessionTokenRef.current = createSessionToken();
 
       console.log(
         "📍 DESTINATION SELECTED:",
@@ -1318,6 +1344,11 @@ async function restoreActiveRide() {
                 placeholderTextColor={mfTheme.muted}
                 value={pickupAddress}
                 onChangeText={handlePickupChange}
+                onFocus={() => {
+                  if (pickupAddress.trim().length >= 2) {
+                    handlePickupChange(pickupAddress);
+                  }
+                }}
                 editable={!loading}
                 selectionColor={mfTheme.gold}
               />
@@ -1390,6 +1421,11 @@ async function restoreActiveRide() {
                 placeholderTextColor={mfTheme.muted}
                 value={destinationAddress}
                 onChangeText={handleDestinationChange}
+                onFocus={() => {
+                  if (destinationAddress.trim().length >= 2) {
+                    handleDestinationChange(destinationAddress);
+                  }
+                }}
                 editable={!loading}
                 selectionColor={mfTheme.gold}
               />
@@ -1510,55 +1546,55 @@ function PlaceSuggestions({
   suggestions,
   onSelect,
 }: PlaceSuggestionsProps) {
+  if (suggestions.length === 0) {
+    return null;
+  }
+
   return (
     <View style={styles.suggestionsBox}>
-      <FlatList
-        data={suggestions}
-        keyExtractor={(item) =>
-          item.placeId
-        }
-        keyboardShouldPersistTaps="handled"
-        renderItem={({ item }) => (
-          <Pressable
-            style={styles.suggestionRow}
-            onPress={() =>
-              onSelect(item)
-            }
-          >
+      {suggestions.map((item, index) => (
+        <Pressable
+          key={item.placeId}
+          style={[
+            styles.suggestionRow,
+            index === suggestions.length - 1
+              ? styles.suggestionRowLast
+              : null,
+          ]}
+          onPress={() => onSelect(item)}
+          android_ripple={{ color: mfTheme.goldSoft }}
+        >
+          <View style={styles.suggestionPinCircle}>
+            <Text style={styles.suggestionPinText}>●</Text>
+          </View>
+
+          <View style={styles.suggestionTextBox}>
             <Text
-              style={styles.suggestionIcon}
+              style={styles.suggestionTitle}
+              numberOfLines={1}
             >
-              📍
+              {item.title}
             </Text>
 
-            <View
-              style={
-                styles.suggestionTextBox
-              }
-            >
+            {item.subtitle ? (
               <Text
-                style={
-                  styles.suggestionTitle
-                }
-                numberOfLines={1}
+                style={styles.suggestionSubtitle}
+                numberOfLines={2}
               >
-                {item.title}
+                {item.subtitle}
               </Text>
+            ) : null}
+          </View>
 
-              {item.subtitle ? (
-                <Text
-                  style={
-                    styles.suggestionSubtitle
-                  }
-                  numberOfLines={2}
-                >
-                  {item.subtitle}
-                </Text>
-              ) : null}
-            </View>
-          </Pressable>
-        )}
-      />
+          <Text style={styles.suggestionArrow}>›</Text>
+        </Pressable>
+      ))}
+
+      <View style={styles.googleAttribution}>
+        <Text style={styles.googleAttributionText}>
+          Powered by Google
+        </Text>
+      </View>
     </View>
   );
 }
@@ -1989,6 +2025,7 @@ const styles = StyleSheet.create({
   },
 
   locationInputBox: {
+    zIndex: 50,
     minHeight: 58,
     backgroundColor: "#FFFCF7",
     borderWidth: 1.5,
@@ -2028,23 +2065,45 @@ const styles = StyleSheet.create({
     borderColor: mfTheme.border,
     borderRadius: 15,
     marginTop: 5,
-    maxHeight: 210,
+    marginBottom: 4,
     overflow: "hidden",
+    zIndex: 1000,
+    elevation: 10,
+    shadowColor: "#172033",
+    shadowOpacity: 0.12,
+    shadowRadius: 12,
+    shadowOffset: { width: 0, height: 5 },
   },
 
   suggestionRow: {
+    minHeight: 62,
     flexDirection: "row",
     alignItems: "center",
     paddingHorizontal: 13,
-    paddingVertical: 13,
+    paddingVertical: 10,
     borderBottomWidth: 1,
     borderBottomColor: mfTheme.border,
+    backgroundColor: mfTheme.white,
   },
 
-  suggestionIcon: {
-    fontSize: 19,
-    marginRight: 9,
+  suggestionRowLast: {
+    borderBottomWidth: 0,
+  },
+
+  suggestionPinCircle: {
+    width: 32,
+    height: 32,
+    borderRadius: 16,
+    backgroundColor: mfTheme.goldSoft,
+    alignItems: "center",
+    justifyContent: "center",
+    marginRight: 10,
+  },
+
+  suggestionPinText: {
     color: mfTheme.goldDark,
+    fontSize: 13,
+    fontWeight: "900",
   },
 
   suggestionTextBox: {
@@ -2061,6 +2120,27 @@ const styles = StyleSheet.create({
     color: mfTheme.muted,
     fontSize: 12,
     marginTop: 3,
+  },
+
+  suggestionArrow: {
+    color: mfTheme.muted,
+    fontSize: 24,
+    lineHeight: 24,
+    marginLeft: 8,
+  },
+
+  googleAttribution: {
+    minHeight: 25,
+    alignItems: "flex-end",
+    justifyContent: "center",
+    paddingHorizontal: 12,
+    backgroundColor: "#FAFAFA",
+  },
+
+  googleAttributionText: {
+    color: "#777777",
+    fontSize: 9,
+    fontWeight: "600",
   },
 
   selectedText: {
