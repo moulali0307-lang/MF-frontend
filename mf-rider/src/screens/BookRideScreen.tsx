@@ -3,16 +3,14 @@ import * as Location from "expo-location";
 import {
   ActivityIndicator,
   Alert,
-  Image,
-  Platform,
+  FlatList,
+  Linking,
   Pressable,
-  ScrollView,
   StyleSheet,
   Text,
   TextInput,
   View,
 } from "react-native";
-
 
 import {
   cancelRide,
@@ -38,21 +36,7 @@ const ACTIVE_STATUSES: Ride["status"][] = [
 const POLL_INTERVAL_MS = 6000;
 
 const GOOGLE_MAPS_API_KEY =
-  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY?.trim();
-
-const mfRidesHero = require("../assets/mf1.png");
-
-const mfTheme = {
-  cream: "#FBF8F1",
-  white: "#FFFFFF",
-  navy: "#172033",
-  gold: "#E3A321",
-  goldDark: "#C98A13",
-  goldSoft: "#FFF1C9",
-  border: "#E8DDC9",
-  muted: "#747887",
-  danger: "#D93A2B",
-};
+  process.env.EXPO_PUBLIC_GOOGLE_MAPS_API_KEY;
 
 interface PlaceSuggestion {
   placeId: string;
@@ -64,10 +48,6 @@ interface SelectedPlace {
   address: string;
   latitude: number;
   longitude: number;
-}
-
-function createSessionToken(): string {
-  return `${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
 }
 
 export function BookRideScreen({
@@ -119,10 +99,6 @@ export function BookRideScreen({
   const destinationSearchTimerRef =
     useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // One autocomplete session token per input field.
-  const pickupSessionTokenRef = useRef<string>(createSessionToken());
-  const destinationSessionTokenRef = useRef<string>(createSessionToken());
-
   // ============================================================
   // RIDE STATE
   // ============================================================
@@ -135,8 +111,231 @@ export function BookRideScreen({
   const [errorMessage, setErrorMessage] =
     useState("");
 
+  // ============================================================
+  // SIMPLE AI TRAVEL ASSISTANT
+  // ============================================================
+  // The assistant works locally even when no AI backend is configured.
+  // If EXPO_PUBLIC_AI_API_URL is configured later, the same chat can use
+  // your real AI service without changing this screen's UI.
+  const [aiMessage, setAiMessage] = useState("");
+  const [aiReply, setAiReply] = useState(
+    "Hi 👋 I can help you choose a place, understand your ride, estimate your trip, or explain what to do next. You can type normally — simple words are okay."
+  );
+  const [aiLoading, setAiLoading] = useState(false);
+  const [showAiChat, setShowAiChat] = useState(true);
+
+  const [routeDistanceKm, setRouteDistanceKm] = useState<number | null>(null);
+  const [routeMinutes, setRouteMinutes] = useState<number | null>(null);
+  const [routeEstimateReady, setRouteEstimateReady] = useState(false);
+
   const pollTimerRef =
     useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ============================================================
+  // SMALL DISTANCE HELPER
+  // ============================================================
+
+  function calculateDistanceKm(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ) {
+    const toRad = (value: number) => (value * Math.PI) / 180;
+    const earthRadiusKm = 6371;
+    const dLat = toRad(lat2 - lat1);
+    const dLon = toRad(lon2 - lon1);
+    const a =
+      Math.sin(dLat / 2) ** 2 +
+      Math.cos(toRad(lat1)) *
+        Math.cos(toRad(lat2)) *
+        Math.sin(dLon / 2) ** 2;
+    return earthRadiusKm * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+  }
+
+  // ============================================================
+  // LOCAL AI TRAVEL ASSISTANT
+  // ============================================================
+
+  async function askTravelAssistant(overrideMessage?: string) {
+    const message = (overrideMessage ?? aiMessage).trim();
+
+    if (!message) {
+      setAiReply("Please type what you need. For example: 'I want to go to Goa' or 'Is this ride expensive?'");
+      return;
+    }
+
+    setAiLoading(true);
+
+    try {
+      const aiApiUrl = process.env.EXPO_PUBLIC_AI_API_URL;
+
+      if (aiApiUrl) {
+        try {
+          const response = await fetch(aiApiUrl, {
+            method: "POST",
+            headers: {
+              "Content-Type": "application/json",
+              ...(token ? { Authorization: `Bearer ${token}` } : {}),
+            },
+            body: JSON.stringify({
+              message,
+              pickup: pickupAddress.trim() || null,
+              destination: destinationAddress.trim() || null,
+              pickupLatitude,
+              pickupLongitude,
+              destinationLatitude,
+              destinationLongitude,
+              app: "MF Rides Rider",
+              language: "simple English",
+            }),
+          });
+
+          const data = await response.json();
+
+          if (response.ok) {
+            const serverReply =
+              data?.reply ??
+              data?.message ??
+              data?.answer ??
+              data?.response ??
+              data?.data?.reply;
+
+            if (typeof serverReply === "string" && serverReply.trim()) {
+              setAiReply(serverReply.trim());
+              setAiMessage("");
+              return;
+            }
+          }
+        } catch (aiError) {
+          console.warn("⚠️ AI BACKEND UNAVAILABLE — USING LOCAL ASSISTANT:", aiError);
+        }
+      }
+
+      const lower = message.toLowerCase();
+
+      if (lower.includes("help") || lower.includes("support") || lower.includes("problem")) {
+        setAiReply(
+          "I can help. First tell me what happened. If this is urgent, use the 24/7 Customer Care button below. For a normal ride problem, keep your ride screen open so the latest status can be checked."
+        );
+      } else if (lower.includes("cheap") || lower.includes("budget") || lower.includes("price") || lower.includes("cost")) {
+        setAiReply(
+          "For a lower-cost trip, keep the pickup and destination exact, compare the available ride type, and avoid unnecessary stops. I can also explain the route after you choose both places."
+        );
+      } else if (lower.includes("where") || lower.includes("go") || lower.includes("trip") || lower.includes("journey")) {
+        setAiReply(
+          destinationAddress.trim()
+            ? `Your destination is ${destinationAddress.trim()}. I will keep the trip simple: pickup → route → destination. Check the route preview below before confirming.`
+            : "Tell me the place you want to go. Example: 'I want to go from Hyderabad to Goa'. I will help you step by step."
+        );
+      } else if (lower.includes("explain") || lower.includes("how")) {
+        setAiReply(
+          "Easy steps: 1) choose pickup, 2) choose destination, 3) check the route preview, 4) press Confirm Ride, 5) wait for a partner. You do not need to understand technical words."
+        );
+      } else {
+        setAiReply(
+          "Got it 👍 I can help with your ride. Try one of these: 'help me', 'cheapest ride', 'explain my ride', or tell me your destination."
+        );
+      }
+
+      setAiMessage("");
+    } finally {
+      setAiLoading(false);
+    }
+  }
+
+  // ============================================================
+  // ROUTE PREVIEW
+  // ============================================================
+
+  function updateRoutePreview(
+    nextPickupLatitude: number | null = pickupLatitude,
+    nextPickupLongitude: number | null = pickupLongitude,
+    nextDestinationLatitude: number | null = destinationLatitude,
+    nextDestinationLongitude: number | null = destinationLongitude,
+  ) {
+    if (
+      nextPickupLatitude === null ||
+      nextPickupLongitude === null ||
+      nextDestinationLatitude === null ||
+      nextDestinationLongitude === null
+    ) {
+      setRouteDistanceKm(null);
+      setRouteMinutes(null);
+      setRouteEstimateReady(false);
+      return;
+    }
+
+    const distance = calculateDistanceKm(
+      nextPickupLatitude,
+      nextPickupLongitude,
+      nextDestinationLatitude,
+      nextDestinationLongitude,
+    );
+
+    // This is an intentionally conservative road-time estimate, not a fare quote.
+    const estimatedMinutes = Math.max(5, Math.round((distance / 28) * 60));
+
+    setRouteDistanceKm(Number(distance.toFixed(1)));
+    setRouteMinutes(estimatedMinutes);
+    setRouteEstimateReady(true);
+  }
+
+  async function openRouteInMaps() {
+    if (
+      pickupLatitude === null ||
+      pickupLongitude === null ||
+      destinationLatitude === null ||
+      destinationLongitude === null
+    ) {
+      setErrorMessage("Please select both pickup and destination first.");
+      return;
+    }
+
+    const url =
+      `https://www.google.com/maps/dir/?api=1` +
+      `&origin=${pickupLatitude},${pickupLongitude}` +
+      `&destination=${destinationLatitude},${destinationLongitude}` +
+      `&travelmode=driving`;
+
+    try {
+      const supported = await Linking.canOpenURL(url);
+      if (!supported) {
+        setErrorMessage("Unable to open the map on this device.");
+        return;
+      }
+      await Linking.openURL(url);
+    } catch (error) {
+      console.error("❌ MAP OPEN ERROR:", error);
+      setErrorMessage("Unable to open the route map.");
+    }
+  }
+
+  // ============================================================
+  // 24/7 CUSTOMER CARE
+  // ============================================================
+
+  async function openCustomerCare() {
+    const supportPhone = process.env.EXPO_PUBLIC_SUPPORT_PHONE;
+
+    if (!supportPhone) {
+      setAiReply(
+        "24/7 Customer Care is ready. The AI assistant is available here now. To enable direct phone support, add EXPO_PUBLIC_SUPPORT_PHONE to your rider .env file."
+      );
+      setShowAiChat(true);
+      return;
+    }
+
+    const phoneUrl = `tel:${supportPhone}`;
+
+    try {
+      await Linking.openURL(phoneUrl);
+    } catch (error) {
+      console.error("❌ SUPPORT CALL ERROR:", error);
+      setAiReply("I could not open the phone app. Please use the AI assistant here for immediate guidance.");
+      setShowAiChat(true);
+    }
+  }
 
   // ============================================================
   // STOP POLLING
@@ -155,11 +354,10 @@ export function BookRideScreen({
 
   async function searchGooglePlaces(
     input: string,
-    sessionToken?: string,
   ): Promise<PlaceSuggestion[]> {
-    if (!GOOGLE_MAPS_API_KEY || GOOGLE_MAPS_API_KEY === "YOUR_GOOGLE_API_KEY") {
+    if (!GOOGLE_MAPS_API_KEY) {
       throw new Error(
-        "Google Maps API key is missing. Set EXPO_PUBLIC_GOOGLE_MAPS_API_KEY in mf-rider/.env and restart Expo.",
+        "Google Maps API key is missing. Add EXPO_PUBLIC_GOOGLE_MAPS_API_KEY to .env.",
       );
     }
 
@@ -177,68 +375,63 @@ export function BookRideScreen({
           "Content-Type": "application/json",
           "X-Goog-Api-Key": GOOGLE_MAPS_API_KEY,
           "X-Goog-FieldMask":
-            "suggestions.placePrediction.placeId,suggestions.placePrediction.text.text,suggestions.placePrediction.structuredFormat",
+            "suggestions.placePrediction.placeId,suggestions.placePrediction.text,suggestions.placePrediction.structuredFormat",
         },
         body: JSON.stringify({
           input: trimmed,
           includedRegionCodes: ["in"],
           languageCode: "en",
-          ...(sessionToken ? { sessionToken } : {}),
         }),
       },
     );
 
     const data = await response.json();
 
-    console.log("📍 GOOGLE PLACES STATUS:", response.status);
+    console.log(
+      "📍 GOOGLE PLACES STATUS:",
+      response.status,
+    );
 
     if (!response.ok) {
-      console.error("❌ GOOGLE PLACES ERROR:", data);
-
-      const googleMessage =
-        data?.error?.message ||
-        "Google Places Autocomplete request failed.";
+      console.error(
+        "❌ GOOGLE PLACES ERROR:",
+        data,
+      );
 
       throw new Error(
-        `${googleMessage} Check that Places API (New) is enabled for this API key.`
+        data?.error?.message ||
+          "Google Places search failed.",
       );
     }
 
-    const suggestions = Array.isArray(data?.suggestions)
-      ? data.suggestions
-      : [];
+    const suggestions =
+      Array.isArray(data?.suggestions)
+        ? data.suggestions
+        : [];
 
     return suggestions
-      .map((item: any): PlaceSuggestion | null => {
-        const prediction = item?.placePrediction;
+      .map((item: any) => {
+        const prediction =
+          item?.placePrediction;
 
         if (!prediction?.placeId) {
           return null;
         }
 
-        const title =
-          prediction?.structuredFormat?.mainText?.text ||
-          prediction?.text?.text ||
-          "";
-
-        const subtitle =
-          prediction?.structuredFormat?.secondaryText?.text ||
-          "";
-
-        if (!title) {
-          return null;
-        }
-
         return {
           placeId: prediction.placeId,
-          title,
-          subtitle,
+          title:
+            prediction?.structuredFormat
+              ?.mainText?.text ||
+            prediction?.text?.text ||
+            "",
+          subtitle:
+            prediction?.structuredFormat
+              ?.secondaryText?.text ||
+            "",
         };
       })
-      .filter(
-        (item: PlaceSuggestion | null): item is PlaceSuggestion =>
-          item !== null,
-      );
+      .filter(Boolean);
   }
 
   // ============================================================
@@ -247,7 +440,6 @@ export function BookRideScreen({
 
   async function getGooglePlaceDetails(
     placeId: string,
-    sessionToken?: string,
   ): Promise<SelectedPlace> {
     if (!GOOGLE_MAPS_API_KEY) {
       throw new Error(
@@ -258,7 +450,7 @@ export function BookRideScreen({
     const response = await fetch(
       `https://places.googleapis.com/v1/places/${encodeURIComponent(
         placeId,
-      )}${sessionToken ? `?sessionToken=${encodeURIComponent(sessionToken)}` : ""}`,
+      )}`,
       {
         method: "GET",
         headers: {
@@ -315,35 +507,88 @@ export function BookRideScreen({
   // ============================================================
 
   async function geocodeAddress(
-  input: string,
-): Promise<SelectedPlace> {
-  const trimmed = input.trim();
+    input: string,
+  ): Promise<SelectedPlace> {
+    if (!GOOGLE_MAPS_API_KEY) {
+      throw new Error(
+        "Google Maps API key is missing. Create .env in mf-rider and add EXPO_PUBLIC_GOOGLE_MAPS_API_KEY.",
+      );
+    }
 
-  if (!trimmed) {
-    throw new Error(
-      "Please enter a location.",
+    const trimmed = input.trim();
+
+    if (!trimmed) {
+      throw new Error("Please enter a destination.");
+    }
+
+    const url =
+      `https://maps.googleapis.com/maps/api/geocode/json?address=${encodeURIComponent(
+        trimmed,
+      )}&key=${encodeURIComponent(
+        GOOGLE_MAPS_API_KEY,
+      )}&region=in&language=en`;
+
+    const response = await fetch(url);
+    const data = await response.json();
+
+    console.log(
+      "📍 GEOCODING STATUS:",
+      response.status,
+      data?.status,
     );
+
+    if (!response.ok || data?.status !== "OK") {
+      console.error(
+        "❌ GEOCODING ERROR:",
+        data,
+      );
+
+      if (
+        data?.status === "REQUEST_DENIED"
+      ) {
+        throw new Error(
+          "Google Geocoding API request was denied. Check billing, API key restrictions, and Geocoding API.",
+        );
+      }
+
+      if (
+        data?.status === "ZERO_RESULTS"
+      ) {
+        throw new Error(
+          `Location "${trimmed}" could not be found. Please enter a more specific place.`,
+        );
+      }
+
+      throw new Error(
+        data?.error_message ||
+          "Unable to find this location.",
+      );
+    }
+
+    const result = data?.results?.[0];
+
+    const latitude =
+      result?.geometry?.location?.lat;
+    const longitude =
+      result?.geometry?.location?.lng;
+
+    if (
+      typeof latitude !== "number" ||
+      typeof longitude !== "number"
+    ) {
+      throw new Error(
+        "Google could not return valid coordinates for this location.",
+      );
+    }
+
+    return {
+      address:
+        result?.formatted_address ||
+        trimmed,
+      latitude,
+      longitude,
+    };
   }
-
-  const suggestions =
-    await searchGooglePlaces(trimmed);
-
-  if (
-    !suggestions ||
-    suggestions.length === 0
-  ) {
-    throw new Error(
-      `Location "${trimmed}" could not be found. Please select a valid location.`,
-    );
-  }
-
-  const firstSuggestion =
-    suggestions[0];
-
-  return await getGooglePlaceDetails(
-    firstSuggestion.placeId,
-  );
-}
 
   // ============================================================
   // SEARCH PICKUP
@@ -373,10 +618,7 @@ export function BookRideScreen({
           setSearchingPickup(true);
 
           const results =
-            await searchGooglePlaces(
-              value,
-              pickupSessionTokenRef.current,
-            );
+            await searchGooglePlaces(value);
 
           setPickupSuggestions(results);
         } catch (error) {
@@ -426,10 +668,7 @@ export function BookRideScreen({
           setSearchingDestination(true);
 
           const results =
-            await searchGooglePlaces(
-              value,
-              destinationSessionTokenRef.current,
-            );
+            await searchGooglePlaces(value);
 
           setDestinationSuggestions(results);
         } catch (error) {
@@ -459,14 +698,17 @@ export function BookRideScreen({
       const place =
         await getGooglePlaceDetails(
           suggestion.placeId,
-          pickupSessionTokenRef.current,
         );
 
       setPickupAddress(place.address);
       setPickupLatitude(place.latitude);
       setPickupLongitude(place.longitude);
-
-      pickupSessionTokenRef.current = createSessionToken();
+      updateRoutePreview(
+        place.latitude,
+        place.longitude,
+        destinationLatitude,
+        destinationLongitude,
+      );
 
       console.log(
         "📍 PICKUP SELECTED:",
@@ -502,14 +744,17 @@ export function BookRideScreen({
       const place =
         await getGooglePlaceDetails(
           suggestion.placeId,
-          destinationSessionTokenRef.current,
         );
 
       setDestinationAddress(place.address);
       setDestinationLatitude(place.latitude);
       setDestinationLongitude(place.longitude);
-
-      destinationSessionTokenRef.current = createSessionToken();
+      updateRoutePreview(
+        pickupLatitude,
+        pickupLongitude,
+        place.latitude,
+        place.longitude,
+      );
 
       console.log(
         "📍 DESTINATION SELECTED:",
@@ -567,6 +812,12 @@ export function BookRideScreen({
 
       setPickupLatitude(latitude);
       setPickupLongitude(longitude);
+      updateRoutePreview(
+        latitude,
+        longitude,
+        destinationLatitude,
+        destinationLongitude,
+      );
 
       // First try Google reverse geocoding so the rider
       // sees a real area/place name instead of coordinates.
@@ -677,6 +928,8 @@ export function BookRideScreen({
   // ============================================================
 
   useEffect(() => {
+    detectCurrentLocation();
+
     return () => {
       if (
         pickupSearchTimerRef.current !== null
@@ -709,27 +962,23 @@ export function BookRideScreen({
       return;
     }
 
-   let cancelled = false;
+    let cancelled = false;
 
-async function restoreActiveRide() {
-  if (!token) {
-    return;
-  }
+    async function restoreActiveRide() {
+      try {
+        setRestoringRide(true);
+        setErrorMessage("");
 
-  try {
-    setRestoringRide(true);
-    setErrorMessage("");
+        console.log(
+          "🔍 CHECKING RIDER ACTIVE RIDE...",
+        );
 
-    console.log(
-      "🔍 CHECKING RIDER ACTIVE RIDE...",
-    );
+        const result =
+          await listMyRides(token);
 
-    const result =
-      await listMyRides(token);
-
-    if (cancelled) {
-      return;
-    }
+        if (cancelled) {
+          return;
+        }
 
         const activeRide =
           result.rides.find((item) =>
@@ -827,7 +1076,7 @@ async function restoreActiveRide() {
 
     if (!pickupAddress.trim()) {
       setErrorMessage(
-        "Please select a pickup location.",
+        "Please enter your pickup place or tap 📍 to use your current location.",
       );
       return;
     }
@@ -861,7 +1110,8 @@ async function restoreActiveRide() {
     setLoading(true);
 
     try {
-  // 👇 NEW PICKUP CODE
+      // If the rider typed a pickup but did not tap a Google suggestion,
+      // resolve it automatically so Confirm Ride does not stay disabled.
       let finalPickupAddress = pickupAddress.trim();
       let finalPickupLatitude = pickupLatitude;
       let finalPickupLongitude = pickupLongitude;
@@ -870,10 +1120,7 @@ async function restoreActiveRide() {
         finalPickupLatitude === null ||
         finalPickupLongitude === null
       ) {
-        const pickupPlace = await geocodeAddress(
-          finalPickupAddress,
-        );
-
+        const pickupPlace = await geocodeAddress(finalPickupAddress);
         finalPickupAddress = pickupPlace.address;
         finalPickupLatitude = pickupPlace.latitude;
         finalPickupLongitude = pickupPlace.longitude;
@@ -883,7 +1130,15 @@ async function restoreActiveRide() {
         setPickupLongitude(pickupPlace.longitude);
       }
 
-  // 👇 EXISTING DESTINATION CODE
+      updateRoutePreview(
+        finalPickupLatitude,
+        finalPickupLongitude,
+        destinationLatitude,
+        destinationLongitude,
+      );
+
+      // If the rider typed a destination but did not
+      // tap a Google suggestion, resolve it automatically.
       let finalDestinationAddress =
         destinationAddress.trim();
 
@@ -893,7 +1148,6 @@ async function restoreActiveRide() {
       let finalDestinationLongitude =
         destinationLongitude;
 
-  
       if (
         finalDestinationLatitude === null ||
         finalDestinationLongitude === null
@@ -915,59 +1169,60 @@ async function restoreActiveRide() {
         setDestinationAddress(
           place.address,
         );
-
         setDestinationLatitude(
           place.latitude,
         );
-
         setDestinationLongitude(
           place.longitude,
         );
       }
-      
-      console.log("🚕 CREATING RIDE");
 
-      if (
-        finalPickupLatitude === null ||
-        finalPickupLongitude === null
-      ) {
-        throw new Error(
-          "Unable to get pickup location coordinates.",
-        );
-      }
-
-      if (
-        finalDestinationLatitude === null ||
-        finalDestinationLongitude === null
-      ) {
-        throw new Error(
-          "Unable to get destination coordinates.",
-        );
-      }
-
-        const result =
-  await createRide(
-    {
-      pickupAddress:
-        finalPickupAddress,
-
-      pickupLatitude:
+      updateRoutePreview(
         finalPickupLatitude,
-
-      pickupLongitude:
         finalPickupLongitude,
-
-      destinationAddress:
-        finalDestinationAddress,
-
-      destinationLatitude:
         finalDestinationLatitude,
-
-      destinationLongitude:
         finalDestinationLongitude,
-    },
-    token,
-  );
+      );
+
+      console.log(
+        "🚕 CREATING RIDE",
+      );
+
+      console.log({
+        pickupAddress: finalPickupAddress,
+        pickupLatitude: finalPickupLatitude,
+        pickupLongitude: finalPickupLongitude,
+        destinationAddress:
+          finalDestinationAddress,
+        destinationLatitude:
+          finalDestinationLatitude,
+        destinationLongitude:
+          finalDestinationLongitude,
+      });
+
+      const result =
+        await createRide(
+          {
+            pickupAddress:
+              finalPickupAddress,
+
+            pickupLatitude:
+              finalPickupLatitude,
+
+            pickupLongitude:
+              finalPickupLongitude,
+
+            destinationAddress:
+              finalDestinationAddress,
+
+            destinationLatitude:
+              finalDestinationLatitude,
+
+            destinationLongitude:
+              finalDestinationLongitude,
+          },
+          token,
+        );
 
       console.log(
         "✅ CREATE RIDE RESULT:",
@@ -1174,16 +1429,13 @@ async function restoreActiveRide() {
   // ============================================================
 
   return (
-    <ScrollView
-      style={styles.screen}
-      contentContainerStyle={styles.container}
-      keyboardShouldPersistTaps="handled"
-      showsVerticalScrollIndicator={false}
-    >
+    <View style={styles.container}>
       <Pressable
         onPress={
           ride &&
-          ACTIVE_STATUSES.includes(ride.status)
+          ACTIVE_STATUSES.includes(
+            ride.status,
+          )
             ? undefined
             : onBack
         }
@@ -1191,7 +1443,9 @@ async function restoreActiveRide() {
           loading ||
           Boolean(
             ride &&
-              ACTIVE_STATUSES.includes(ride.status),
+              ACTIVE_STATUSES.includes(
+                ride.status,
+              ),
           )
         }
       >
@@ -1199,7 +1453,9 @@ async function restoreActiveRide() {
           style={[
             styles.backText,
             ride &&
-            ACTIVE_STATUSES.includes(ride.status)
+            ACTIVE_STATUSES.includes(
+              ride.status,
+            )
               ? styles.backTextDisabled
               : null,
           ]}
@@ -1208,38 +1464,20 @@ async function restoreActiveRide() {
         </Text>
       </Pressable>
 
-      {/* BRAND + HERO */}
-      <View style={styles.brandHeader}>
-        <View style={styles.brandCopy}>
-          <View style={styles.brandMark}>
-            <Text style={styles.brandMarkText}>MF</Text>
-          </View>
-
-          <Text style={styles.brandName}>MF-RIDES</Text>
-
-          <Text style={styles.brandTagline}>
-            Smart Rides. Anytime. Anywhere.
-          </Text>
-        </View>
-
-        <Image
-          source={mfRidesHero}
-          style={styles.heroImage}
-          resizeMode="contain"
-        />
-      </View>
-
       <Text style={styles.title}>
-        {ride ? "Your Ride" : "Book a Ride"}
+        {ride
+          ? "Your Ride"
+          : "Book a Ride"}
       </Text>
 
       <Text style={styles.subtitle}>
         {ride
           ? "Your current ride details"
-          : "Choose one pickup and one destination"}
+          : "Choose pickup and destination"}
       </Text>
 
       {/* LOCATION ERROR */}
+
       {locationError ? (
         <View style={styles.locationErrorBox}>
           <Text style={styles.locationErrorTitle}>
@@ -1253,6 +1491,7 @@ async function restoreActiveRide() {
       ) : null}
 
       {/* ACTIVE RIDE */}
+
       {ride ? (
         <RideStatusCard
           ride={ride}
@@ -1263,6 +1502,7 @@ async function restoreActiveRide() {
       ) : null}
 
       {/* ERROR */}
+
       {errorMessage ? (
         <View style={styles.errorBox}>
           <Text style={styles.errorTitle}>
@@ -1275,261 +1515,325 @@ async function restoreActiveRide() {
         </View>
       ) : null}
 
-      {/* LOCATION PREVIEW */}
-      {!ride &&
-      pickupLatitude !== null &&
-      pickupLongitude !== null ? (
-        <View style={styles.mapPreviewCard}>
-          <Text style={styles.mapPreviewIcon}>📍</Text>
-          <Text style={styles.mapPreviewTitle}>Ride Locations</Text>
-
-          <View style={styles.mapRoute}>
-            <View style={styles.mapDotGold} />
-            <View style={styles.mapRouteLine} />
-            <View style={styles.mapDotNavy} />
-          </View>
-
-          <View style={styles.mapLocationBox}>
-            <Text style={styles.mapLocationLabel}>PICKUP</Text>
-            <Text style={styles.mapLocationText} numberOfLines={1}>
-              {pickupAddress || "Pickup location"}
-            </Text>
-          </View>
-
-          <View style={styles.mapLocationBox}>
-            <Text style={styles.mapLocationLabel}>DESTINATION</Text>
-            <Text style={styles.mapLocationText} numberOfLines={1}>
-              {destinationAddress || "Choose destination"}
-            </Text>
-          </View>
-        </View>
-      ) : null}
-
       {/* NEW BOOKING */}
+
       {!ride ? (
-        <View style={styles.bookingCard}>
-          <View style={styles.bookingTimeline}>
-            <View style={styles.timelineIconNavy}>
-              <Text style={styles.timelineIconText}>●</Text>
-            </View>
+        <>
+          {/* PICKUP */}
 
-            <View style={styles.timelineLine} />
+          <Text style={styles.label}>
+            Pickup location
+          </Text>
 
-            <View style={styles.timelineIconGold}>
-              <Text style={styles.timelineIconTextDark}>⚑</Text>
-            </View>
-          </View>
+          <View style={styles.locationInputBox}>
+            <TextInput
+              style={styles.locationInput}
+              placeholder="Search pickup location"
+              placeholderTextColor={
+                colors.textMuted
+              }
+              value={pickupAddress}
+              onChangeText={
+                handlePickupChange
+              }
+              editable={!loading}
+            />
 
-          <View style={styles.bookingFields}>
-            {/* PICKUP */}
-            <Text style={styles.label}>
-              PICKUP LOCATION
-            </Text>
-
-            <View style={styles.locationInputBox}>
-              <TextInput
-                style={[
-                  styles.locationInput,
-                  Platform.OS === "web"
-                    ? ({
-                        outline: "none",
-                        outlineStyle: "none",
-                        outlineWidth: 0,
-                        borderWidth: 0,
-                        boxShadow: "none",
-                      } as any)
-                    : null,
-                ]}
-                placeholder="Search pickup location"
-                placeholderTextColor={mfTheme.muted}
-                value={pickupAddress}
-                onChangeText={handlePickupChange}
-                onFocus={() => {
-                  if (pickupAddress.trim().length >= 2) {
-                    handlePickupChange(pickupAddress);
-                  }
-                }}
-                editable={!loading}
-                selectionColor={mfTheme.gold}
+            {searchingPickup ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.accent}
               />
+            ) : null}
 
-              {searchingPickup ? (
+            <Pressable
+              onPress={
+                detectCurrentLocation
+              }
+              disabled={
+                locationLoading ||
+                loading
+              }
+              style={styles.locationButton}
+            >
+              {locationLoading ? (
                 <ActivityIndicator
                   size="small"
-                  color={mfTheme.gold}
+                  color={colors.accent}
                 />
-              ) : null}
+              ) : (
+                <Text
+                  style={
+                    styles.locationIcon
+                  }
+                >
+                  📍
+                </Text>
+              )}
+            </Pressable>
+          </View>
+
+          {pickupSuggestions.length >
+          0 ? (
+            <PlaceSuggestions
+              suggestions={
+                pickupSuggestions
+              }
+              onSelect={
+                selectPickupPlace
+              }
+            />
+          ) : null}
+
+          {pickupLatitude !== null &&
+          pickupLongitude !== null ? (
+            <Text style={styles.selectedText}>
+              ✓ Pickup selected
+            </Text>
+          ) : (
+            <Text style={styles.helperText}>
+              Search a place or use your
+              current location
+            </Text>
+          )}
+
+          {/* DESTINATION */}
+
+          <Text style={styles.label}>
+            Destination
+          </Text>
+
+          <View style={styles.locationInputBox}>
+            <TextInput
+              style={styles.locationInput}
+              placeholder="Where do you want to go?"
+              placeholderTextColor={
+                colors.textMuted
+              }
+              value={
+                destinationAddress
+              }
+              onChangeText={
+                handleDestinationChange
+              }
+              editable={!loading}
+            />
+
+            {searchingDestination ? (
+              <ActivityIndicator
+                size="small"
+                color={colors.accent}
+              />
+            ) : null}
+          </View>
+
+          {destinationSuggestions.length >
+          0 ? (
+            <PlaceSuggestions
+              suggestions={
+                destinationSuggestions
+              }
+              onSelect={
+                selectDestinationPlace
+              }
+            />
+          ) : null}
+
+          {destinationLatitude !==
+            null &&
+          destinationLongitude !==
+            null ? (
+            <Text style={styles.selectedText}>
+              ✓ Destination selected
+            </Text>
+          ) : (
+            <Text style={styles.helperText}>
+              Type a place name and tap Confirm Ride.
+              I will find the location automatically, or you can select a Google suggestion.
+            </Text>
+          )}
+
+          {/* ======================================================
+           * EASY AI HELP
+           * ====================================================== */}
+          <View style={styles.aiCard}>
+            <View style={styles.aiHeaderRow}>
+              <View style={styles.aiTitleWrap}>
+                <Text style={styles.aiIcon}>✨</Text>
+                <View>
+                  <Text style={styles.aiTitle}>MF AI Travel Helper</Text>
+                  <Text style={styles.aiSubtitle}>Simple help — no technical words needed</Text>
+                </View>
+              </View>
 
               <Pressable
-                onPress={detectCurrentLocation}
-                disabled={
-                  locationLoading || loading
-                }
-                style={styles.locationButton}
+                onPress={() => setShowAiChat((value) => !value)}
+                style={styles.aiToggleButton}
               >
-                {locationLoading ? (
-                  <ActivityIndicator
-                    size="small"
-                    color={mfTheme.gold}
-                  />
-                ) : (
-                  <Text style={styles.locationIcon}>
-                    ◎
-                  </Text>
-                )}
+                <Text style={styles.aiToggleText}>
+                  {showAiChat ? "Hide" : "Chat"}
+                </Text>
               </Pressable>
             </View>
 
-            {pickupSuggestions.length > 0 ? (
-              <PlaceSuggestions
-                suggestions={pickupSuggestions}
-                onSelect={selectPickupPlace}
-              />
+            {showAiChat ? (
+              <>
+                <View style={styles.aiReplyBox}>
+                  <Text style={styles.aiReplyLabel}>AI</Text>
+                  <Text style={styles.aiReplyText}>{aiReply}</Text>
+                </View>
+
+                <View style={styles.quickPromptRow}>
+                  <Pressable
+                    style={styles.quickPromptButton}
+                    onPress={() => askTravelAssistant("Help me with my ride")}>
+                    <Text style={styles.quickPromptText}>Help me</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.quickPromptButton}
+                    onPress={() => askTravelAssistant("Find the cheapest option")}>
+                    <Text style={styles.quickPromptText}>Cheapest</Text>
+                  </Pressable>
+
+                  <Pressable
+                    style={styles.quickPromptButton}
+                    onPress={() => askTravelAssistant("Explain my ride simply")}>
+                    <Text style={styles.quickPromptText}>Explain</Text>
+                  </Pressable>
+                </View>
+
+                <View style={styles.aiInputRow}>
+                  <TextInput
+                    style={styles.aiInput}
+                    value={aiMessage}
+                    onChangeText={setAiMessage}
+                    placeholder="Ask anything… e.g. I want to go to Goa"
+                    placeholderTextColor={colors.textMuted}
+                    multiline
+                    editable={!aiLoading}
+                    onSubmitEditing={() => askTravelAssistant()}
+                  />
+                  <Pressable
+                    style={[styles.aiSendButton, aiLoading && styles.buttonDisabled]}
+                    onPress={() => askTravelAssistant()}
+                    disabled={aiLoading}
+                  >
+                    {aiLoading ? (
+                      <ActivityIndicator size="small" color="#fff" />
+                    ) : (
+                      <Text style={styles.aiSendText}>Send</Text>
+                    )}
+                  </Pressable>
+                </View>
+              </>
             ) : null}
+          </View>
 
-            {pickupLatitude !== null &&
-            pickupLongitude !== null ? (
-              <Text style={styles.selectedText}>
-                ✓ Pickup selected
-              </Text>
-            ) : (
-              <Text style={styles.helperText}>
-                Search a place or use your current location
-              </Text>
-            )}
+          {/* ======================================================
+           * ROUTE PREVIEW
+           * ====================================================== */}
+          {routeEstimateReady ? (
+            <View style={styles.routeCard}>
+              <View style={styles.routeHeaderRow}>
+                <Text style={styles.routeTitle}>🗺️ Your journey path</Text>
+                <Text style={styles.routeBadge}>READY</Text>
+              </View>
 
-            {/* DESTINATION */}
-            <Text style={styles.label}>
-              DESTINATION
-            </Text>
+              <View style={styles.routeLine}>
+                <View style={styles.routeDotStart} />
+                <View style={styles.routeDashedLine} />
+                <View style={styles.routeDotEnd} />
+              </View>
 
-            <View style={styles.locationInputBox}>
-              <TextInput
-                style={[
-                  styles.locationInput,
-                  Platform.OS === "web"
-                    ? ({
-                        outline: "none",
-                        outlineStyle: "none",
-                        outlineWidth: 0,
-                        borderWidth: 0,
-                        boxShadow: "none",
-                      } as any)
-                    : null,
-                ]}
-                placeholder="Where do you want to go?"
-                placeholderTextColor={mfTheme.muted}
-                value={destinationAddress}
-                onChangeText={handleDestinationChange}
-                onFocus={() => {
-                  if (destinationAddress.trim().length >= 2) {
-                    handleDestinationChange(destinationAddress);
-                  }
-                }}
-                editable={!loading}
-                selectionColor={mfTheme.gold}
-              />
-
-              {searchingDestination ? (
-                <ActivityIndicator
-                  size="small"
-                  color={mfTheme.gold}
-                />
-              ) : null}
-            </View>   
-
-            {destinationSuggestions.length > 0 ? (
-              <PlaceSuggestions
-                suggestions={destinationSuggestions}
-                onSelect={selectDestinationPlace}
-              />
-            ) : null}
-
-            {destinationLatitude !== null &&
-            destinationLongitude !== null ? (
-              <Text style={styles.selectedText}>
-                ✓ Destination selected
-              </Text>
-            ) : (
-              <Text style={styles.helperText}>
-                Type a city, area or place and choose a Google suggestion.
-              </Text>
-            )}
-
-            {/* CONFIRM */}
-            <Pressable
-              style={[
-                styles.button,
-                (loading ||
-                  !pickupAddress.trim() ||
-                  !destinationAddress.trim()) &&
-                  styles.buttonDisabled,
-              ]}
-              onPress={handleBookRide}
-              disabled={
-                loading ||
-                !pickupAddress.trim() ||
-                !destinationAddress.trim()
-              }
-            >
-              <Text style={styles.buttonText}>
-                {loading
-                  ? "Requesting Ride..."
-                  : "Confirm Ride"}
-              </Text>
-
-              <View style={styles.buttonArrow}>
-                <Text style={styles.buttonArrowText}>
-                  →
+              <View style={styles.routeTextBox}>
+                <Text style={styles.routeFrom} numberOfLines={1}>
+                  {pickupAddress}
+                </Text>
+                <Text style={styles.routeArrow}>↓</Text>
+                <Text style={styles.routeTo} numberOfLines={1}>
+                  {destinationAddress}
                 </Text>
               </View>
-            </Pressable>
-          </View>
-        </View>
+
+              <View style={styles.routeStatsRow}>
+                <View style={styles.routeStat}>
+                  <Text style={styles.routeStatValue}>
+                    {routeDistanceKm ?? "—"} km
+                  </Text>
+                  <Text style={styles.routeStatLabel}>Approx. distance</Text>
+                </View>
+                <View style={styles.routeStat}>
+                  <Text style={styles.routeStatValue}>
+                    {routeMinutes ?? "—"} min
+                  </Text>
+                  <Text style={styles.routeStatLabel}>Approx. travel time</Text>
+                </View>
+              </View>
+
+              <Text style={styles.routeNote}>
+                This is a quick estimate. Actual road distance, traffic and fare can change.
+              </Text>
+
+              <Pressable style={styles.mapButton} onPress={openRouteInMaps}>
+                <Text style={styles.mapButtonText}>Open full route map</Text>
+              </Pressable>
+            </View>
+          ) : null}
+
+          {/* ======================================================
+           * 24/7 CUSTOMER CARE
+           * ====================================================== */}
+          <Pressable
+            style={styles.supportCard}
+            onPress={openCustomerCare}
+          >
+            <View style={styles.supportIconCircle}>
+              <Text style={styles.supportIcon}>☎</Text>
+            </View>
+
+            <View style={styles.supportTextBox}>
+              <Text style={styles.supportTitle}>
+                24/7 Customer Care + AI
+              </Text>
+              <Text style={styles.supportText}>
+                Need help? Tap here. The AI helper is available anytime.
+              </Text>
+            </View>
+
+            <Text style={styles.supportArrow}>›</Text>
+          </Pressable>
+
+          {/* CONFIRM */}
+
+          <Pressable
+            style={[
+              styles.button,
+              (loading ||
+                restoringRide ||
+                !pickupAddress.trim() ||
+                !destinationAddress.trim()) &&
+                styles.buttonDisabled,
+            ]}
+            onPress={handleBookRide}
+            disabled={
+              loading ||
+              restoringRide ||
+              !pickupAddress.trim() ||
+              !destinationAddress.trim()
+            }
+          >
+            <Text style={styles.buttonText}>
+              {loading
+                ? "Requesting Ride..."
+                : "Confirm Ride"}
+            </Text>
+          </Pressable>
+        </>
       ) : null}
-
-      {/* SERVICE BENEFITS */}
-      {!ride ? (
-        <View style={styles.benefitsCard}>
-          <View style={styles.benefitItem}>
-            <Text style={styles.benefitIcon}>✓</Text>
-            <Text style={styles.benefitTitle}>
-              Safe & Secure
-            </Text>
-            <Text style={styles.benefitText}>
-              Verified partners
-            </Text>
-          </View>
-
-          <View style={styles.benefitDivider} />
-
-          <View style={styles.benefitItem}>
-            <Text style={styles.benefitIcon}>⚡</Text>
-            <Text style={styles.benefitTitle}>
-              Quick Booking
-            </Text>
-            <Text style={styles.benefitText}>
-              Instant matching
-            </Text>
-          </View>
-
-          <View style={styles.benefitDivider} />
-
-          <View style={styles.benefitItem}>
-            <Text style={styles.benefitIcon}>◉</Text>
-            <Text style={styles.benefitTitle}>
-              24x7 Support
-            </Text>
-            <Text style={styles.benefitText}>
-              We're here to help
-            </Text>
-          </View>
-        </View>
-      ) : null}
-    </ScrollView>
+    </View>
   );
 }
-
 
 // ============================================================
 // PLACE SUGGESTIONS
@@ -1546,55 +1850,55 @@ function PlaceSuggestions({
   suggestions,
   onSelect,
 }: PlaceSuggestionsProps) {
-  if (suggestions.length === 0) {
-    return null;
-  }
-
   return (
     <View style={styles.suggestionsBox}>
-      {suggestions.map((item, index) => (
-        <Pressable
-          key={item.placeId}
-          style={[
-            styles.suggestionRow,
-            index === suggestions.length - 1
-              ? styles.suggestionRowLast
-              : null,
-          ]}
-          onPress={() => onSelect(item)}
-          android_ripple={{ color: mfTheme.goldSoft }}
-        >
-          <View style={styles.suggestionPinCircle}>
-            <Text style={styles.suggestionPinText}>●</Text>
-          </View>
-
-          <View style={styles.suggestionTextBox}>
+      <FlatList
+        data={suggestions}
+        keyExtractor={(item) =>
+          item.placeId
+        }
+        keyboardShouldPersistTaps="handled"
+        renderItem={({ item }) => (
+          <Pressable
+            style={styles.suggestionRow}
+            onPress={() =>
+              onSelect(item)
+            }
+          >
             <Text
-              style={styles.suggestionTitle}
-              numberOfLines={1}
+              style={styles.suggestionIcon}
             >
-              {item.title}
+              📍
             </Text>
 
-            {item.subtitle ? (
+            <View
+              style={
+                styles.suggestionTextBox
+              }
+            >
               <Text
-                style={styles.suggestionSubtitle}
-                numberOfLines={2}
+                style={
+                  styles.suggestionTitle
+                }
+                numberOfLines={1}
               >
-                {item.subtitle}
+                {item.title}
               </Text>
-            ) : null}
-          </View>
 
-          <Text style={styles.suggestionArrow}>›</Text>
-        </Pressable>
-      ))}
-
-      <View style={styles.googleAttribution}>
-        <Text style={styles.googleAttributionText}>
-          Powered by Google
-        </Text>
-      </View>
+              {item.subtitle ? (
+                <Text
+                  style={
+                    styles.suggestionSubtitle
+                  }
+                  numberOfLines={2}
+                >
+                  {item.subtitle}
+                </Text>
+              ) : null}
+            </View>
+          </Pressable>
+        )}
+      />
     </View>
   );
 }
@@ -1858,252 +2162,94 @@ function getRideStatusContent(
 // ============================================================
 
 const styles = StyleSheet.create({
-  screen: {
-    flex: 1,
-    backgroundColor: mfTheme.cream,
-  },
-
   container: {
-    paddingHorizontal: 20,
-    paddingTop: 22,
-    paddingBottom: 36,
+    flex: 1,
+    backgroundColor: colors.background,
+    padding: spacing.lg,
+    paddingTop: spacing.xxl,
   },
 
   backText: {
-    color: mfTheme.navy,
+    color: colors.accent,
     fontSize: 16,
-    fontWeight: "800",
-    marginBottom: 16,
+    fontWeight: "600",
+    marginBottom: spacing.lg,
   },
 
   backTextDisabled: {
     opacity: 0.35,
   },
 
-  brandHeader: {
-    minHeight: 175,
-    borderRadius: 28,
-    backgroundColor: mfTheme.goldSoft,
-    borderWidth: 1,
-    borderColor: mfTheme.border,
-    padding: 18,
-    marginBottom: 22,
-    overflow: "hidden",
-    position: "relative",
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  brandCopy: {
-    flex: 1,
-    zIndex: 2,
-    paddingRight: 6,
-  },
-
-  brandMark: {
-    width: 38,
-    height: 38,
-    borderRadius: 12,
-    backgroundColor: mfTheme.gold,
-    alignItems: "center",
-    justifyContent: "center",
-    marginBottom: 9,
-  },
-
-  brandMarkText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
-    letterSpacing: 0.8,
-  },
-
-  brandName: {
-    color: mfTheme.navy,
-    fontSize: 22,
-    fontWeight: "900",
-    letterSpacing: 2.2,
-  },
-
-  brandTagline: {
-    color: mfTheme.muted,
-    fontSize: 11,
-    fontWeight: "600",
-    marginTop: 5,
-  },
-
-  heroImage: {
-    position: "absolute",
-    right: -20,
-    bottom: -8,
-    width: "62%",
-    height: "90%",
-  },
-
   title: {
-    fontSize: 31,
-    fontWeight: "900",
-    color: mfTheme.navy,
-    letterSpacing: -0.5,
+    fontSize: 28,
+    fontWeight: "700",
+    color: colors.text,
   },
 
   subtitle: {
     fontSize: 15,
-    color: mfTheme.muted,
-    marginTop: 6,
-    marginBottom: 18,
-  },
-
-  bookingCard: {
-    backgroundColor: mfTheme.white,
-    borderWidth: 1,
-    borderColor: mfTheme.border,
-    borderRadius: 28,
-    padding: 18,
-    flexDirection: "row",
-    shadowColor: "#172033",
-    shadowOpacity: 0.08,
-    shadowRadius: 18,
-    shadowOffset: { width: 0, height: 8 },
-    elevation: 3,
-  },
-
-  bookingTimeline: {
-    width: 42,
-    alignItems: "center",
-    paddingTop: 3,
-  },
-
-  timelineIconNavy: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: mfTheme.navy,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  timelineIconGold: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: mfTheme.gold,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  timelineIconText: {
-    color: mfTheme.gold,
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  timelineIconTextDark: {
-    color: mfTheme.navy,
-    fontSize: 17,
-    fontWeight: "900",
-  },
-
-  timelineLine: {
-    width: 2,
-    flex: 1,
-    minHeight: 82,
-    marginVertical: 7,
-    backgroundColor: "#EBD9AD",
-  },
-
-  bookingFields: {
-    flex: 1,
-    paddingLeft: 10,
+    color: colors.textMuted,
+    marginTop: spacing.xs,
+    marginBottom: spacing.lg,
   },
 
   label: {
-    fontSize: 12,
-    fontWeight: "900",
-    letterSpacing: 1,
-    color: mfTheme.navy,
-    marginBottom: 8,
+    fontSize: 14,
+    fontWeight: "600",
+    color: colors.text,
+    marginBottom: spacing.xs,
+    marginTop: spacing.md,
   },
 
   locationInputBox: {
-    zIndex: 50,
-    minHeight: 58,
-    backgroundColor: "#FFFCF7",
-    borderWidth: 1.5,
-    borderColor: mfTheme.border,
-    borderRadius: 17,
-    paddingHorizontal: 15,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
     flexDirection: "row",
     alignItems: "center",
+    minHeight: 54,
   },
 
   locationInput: {
     flex: 1,
-    paddingVertical: 12,
-    fontSize: 15,
-    color: mfTheme.navy,
+    paddingVertical: spacing.md,
+    fontSize: 16,
+    color: colors.text,
   },
 
   locationButton: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    backgroundColor: mfTheme.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginLeft: 7,
+    paddingLeft: spacing.sm,
+    paddingVertical: spacing.sm,
   },
 
   locationIcon: {
-    fontSize: 22,
-    color: mfTheme.goldDark,
-    fontWeight: "900",
+    fontSize: 21,
   },
 
   suggestionsBox: {
-    backgroundColor: mfTheme.white,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: mfTheme.border,
-    borderRadius: 15,
-    marginTop: 5,
-    marginBottom: 4,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    marginTop: 4,
+    maxHeight: 210,
     overflow: "hidden",
-    zIndex: 1000,
-    elevation: 10,
-    shadowColor: "#172033",
-    shadowOpacity: 0.12,
-    shadowRadius: 12,
-    shadowOffset: { width: 0, height: 5 },
   },
 
   suggestionRow: {
-    minHeight: 62,
     flexDirection: "row",
     alignItems: "center",
-    paddingHorizontal: 13,
-    paddingVertical: 10,
+    paddingHorizontal: spacing.md,
+    paddingVertical: spacing.md,
     borderBottomWidth: 1,
-    borderBottomColor: mfTheme.border,
-    backgroundColor: mfTheme.white,
+    borderBottomColor: colors.border,
   },
 
-  suggestionRowLast: {
-    borderBottomWidth: 0,
-  },
-
-  suggestionPinCircle: {
-    width: 32,
-    height: 32,
-    borderRadius: 16,
-    backgroundColor: mfTheme.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    marginRight: 10,
-  },
-
-  suggestionPinText: {
-    color: mfTheme.goldDark,
-    fontSize: 13,
-    fontWeight: "900",
+  suggestionIcon: {
+    fontSize: 20,
+    marginRight: spacing.sm,
   },
 
   suggestionTextBox: {
@@ -2111,484 +2257,615 @@ const styles = StyleSheet.create({
   },
 
   suggestionTitle: {
-    color: mfTheme.navy,
-    fontSize: 14,
-    fontWeight: "800",
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "700",
   },
 
   suggestionSubtitle: {
-    color: mfTheme.muted,
+    color: colors.textMuted,
     fontSize: 12,
     marginTop: 3,
-  },
-
-  suggestionArrow: {
-    color: mfTheme.muted,
-    fontSize: 24,
-    lineHeight: 24,
-    marginLeft: 8,
-  },
-
-  googleAttribution: {
-    minHeight: 25,
-    alignItems: "flex-end",
-    justifyContent: "center",
-    paddingHorizontal: 12,
-    backgroundColor: "#FAFAFA",
-  },
-
-  googleAttributionText: {
-    color: "#777777",
-    fontSize: 9,
-    fontWeight: "600",
   },
 
   selectedText: {
-    color: "#159A62",
-    fontSize: 11,
-    fontWeight: "800",
-    marginTop: 6,
-    marginBottom: 4,
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "700",
+    marginTop: 5,
   },
 
   helperText: {
-    fontSize: 11,
-    color: mfTheme.muted,
-    marginTop: 6,
-    marginBottom: 17,
-    lineHeight: 17,
-  },
-
-  button: {
-    minHeight: 58,
-    backgroundColor: mfTheme.gold,
-    borderRadius: 17,
-    alignItems: "center",
-    justifyContent: "center",
-    marginTop: 7,
-    position: "relative",
-    paddingHorizontal: 58,
-  },
-
-  buttonDisabled: {
-    opacity: 0.55,
-  },
-
-  buttonText: {
-    color: "#FFFFFF",
-    fontSize: 16,
-    fontWeight: "900",
-  },
-
-  buttonArrow: {
-    position: "absolute",
-    right: 8,
-    width: 42,
-    height: 42,
-    borderRadius: 21,
-    backgroundColor: mfTheme.navy,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  buttonArrowText: {
-    color: "#FFFFFF",
-    fontSize: 22,
-    fontWeight: "800",
-  },
-
-  benefitsCard: {
-    marginTop: 18,
-    minHeight: 118,
-    backgroundColor: mfTheme.navy,
-    borderRadius: 24,
-    paddingVertical: 18,
-    paddingHorizontal: 8,
-    flexDirection: "row",
-    alignItems: "center",
-  },
-
-  benefitItem: {
-    flex: 1,
-    alignItems: "center",
-    justifyContent: "center",
-  },
-
-  benefitIcon: {
-    width: 34,
-    height: 34,
-    borderRadius: 17,
-    borderWidth: 1.5,
-    borderColor: mfTheme.gold,
-    color: mfTheme.gold,
-    textAlign: "center",
-    textAlignVertical: "center",
-    lineHeight: 31,
-    fontSize: 17,
-    fontWeight: "900",
-    marginBottom: 7,
-  },
-
-  benefitTitle: {
-    color: "#FFFFFF",
-    fontSize: 11,
-    fontWeight: "900",
-    textAlign: "center",
-  },
-
-  benefitText: {
-    color: "#F3D68D",
-    fontSize: 9,
-    marginTop: 3,
-    textAlign: "center",
-  },
-
-  benefitDivider: {
-    width: 1,
-    height: 52,
-    backgroundColor: "rgba(227,163,33,0.55)",
-  },
-
-  mapPreviewCard: {
-    height: 250,
-    borderRadius: 22,
-    overflow: "hidden",
-    marginBottom: 16,
-    borderWidth: 1,
-    borderColor: mfTheme.border,
-    backgroundColor: mfTheme.goldSoft,
-    alignItems: "center",
-    justifyContent: "center",
-    paddingHorizontal: 18,
-  },
-
-  mapPreviewIcon: {
-    fontSize: 28,
-    marginBottom: 2,
-  },
-
-  mapPreviewTitle: {
-    fontSize: 18,
-    fontWeight: "900",
-    color: mfTheme.navy,
-    marginBottom: 10,
-  },
-
-  mapRoute: {
-    width: "70%",
-    flexDirection: "row",
-    alignItems: "center",
-    marginBottom: 10,
-  },
-
-  mapDotGold: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: mfTheme.gold,
-  },
-
-  mapRouteLine: {
-    flex: 1,
-    height: 3,
-    backgroundColor: mfTheme.gold,
-    marginHorizontal: 8,
-  },
-
-  mapDotNavy: {
-    width: 14,
-    height: 14,
-    borderRadius: 7,
-    backgroundColor: mfTheme.navy,
-  },
-
-  mapLocationBox: {
-    width: "100%",
-    backgroundColor: mfTheme.white,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-    marginTop: 4,
-  },
-
-  mapLocationLabel: {
-    fontSize: 9,
-    fontWeight: "900",
-    letterSpacing: 1,
-    color: mfTheme.goldDark,
-  },
-
-  mapLocationText: {
     fontSize: 12,
-    fontWeight: "700",
-    color: mfTheme.navy,
-    marginTop: 2,
+    color: colors.textMuted,
+    marginTop: 5,
   },
 
   locationErrorBox: {
-    backgroundColor: "#FFF8E8",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#E8B3A8",
-    borderRadius: 17,
-    padding: 14,
-    marginBottom: 14,
+    borderColor: "#d9534f",
+    borderRadius: radius.md,
+    padding: spacing.md,
+    marginBottom: spacing.md,
   },
 
   locationErrorTitle: {
-    fontSize: 14,
-    fontWeight: "900",
-    color: mfTheme.danger,
+    fontSize: 15,
+    fontWeight: "700",
+    color: "#d9534f",
   },
 
   locationErrorText: {
     marginTop: 4,
-    color: mfTheme.navy,
-    fontSize: 12,
-    lineHeight: 18,
+    color: colors.text,
+    fontSize: 13,
   },
 
   errorBox: {
-    backgroundColor: "#FFF8F6",
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: "#E8B3A8",
-    borderRadius: 17,
-    padding: 15,
-    marginBottom: 14,
+    borderColor: "#d9534f",
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.md,
   },
 
   errorTitle: {
-    color: mfTheme.danger,
-    fontSize: 16,
-    fontWeight: "900",
-    marginBottom: 5,
+    color: "#d9534f",
+    fontSize: 18,
+    fontWeight: "700",
+    marginBottom: spacing.xs,
   },
 
   errorText: {
-    color: mfTheme.navy,
-    fontSize: 13,
-    lineHeight: 20,
-  },
-
-  successBox: {
-    backgroundColor: mfTheme.white,
-    borderWidth: 1,
-    borderColor: mfTheme.gold,
-    borderRadius: 24,
-    padding: 18,
-    marginBottom: 18,
-  },
-
-  successTitle: {
-    color: mfTheme.navy,
-    fontSize: 21,
-    fontWeight: "900",
-    marginBottom: 7,
-  },
-
-  successText: {
-    color: mfTheme.muted,
+    color: colors.text,
     fontSize: 14,
     lineHeight: 21,
   },
 
+  button: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.xl,
+  },
+
+  buttonDisabled: {
+    opacity: 0.6,
+  },
+
+  buttonText: {
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
+  },
+
+  homeButton: {
+    backgroundColor: colors.accent,
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
+    alignItems: "center",
+    marginTop: spacing.lg,
+  },
+
+  successBox: {
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    borderRadius: radius.md,
+    padding: spacing.lg,
+    marginBottom: spacing.lg,
+  },
+
+  successTitle: {
+    color: colors.accent,
+    fontSize: 21,
+    fontWeight: "800",
+    marginBottom: spacing.sm,
+  },
+
+  successText: {
+    color: colors.text,
+    fontSize: 15,
+    lineHeight: 22,
+  },
+
   detailsBox: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: mfTheme.goldSoft,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
   },
 
   detailLabel: {
-    fontSize: 10,
-    fontWeight: "900",
-    color: mfTheme.goldDark,
-    letterSpacing: 1,
+    fontSize: 11,
+    fontWeight: "800",
+    color: colors.textMuted,
   },
 
   destinationLabel: {
-    marginTop: 15,
+    marginTop: spacing.md,
   },
 
   detailValue: {
-    fontSize: 14,
-    fontWeight: "700",
-    color: mfTheme.navy,
+    fontSize: 15,
+    fontWeight: "600",
+    color: colors.text,
     marginTop: 4,
-    lineHeight: 20,
   },
 
   partnerBox: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: "#F7F3EA",
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
   },
 
   partnerTitle: {
     fontSize: 14,
-    fontWeight: "900",
-    color: mfTheme.navy,
+    fontWeight: "800",
+    color: colors.text,
   },
 
   partnerName: {
     fontSize: 17,
-    fontWeight: "800",
-    color: mfTheme.navy,
+    fontWeight: "700",
+    color: colors.text,
     marginTop: 6,
   },
 
   partnerPhone: {
     fontSize: 14,
-    color: mfTheme.muted,
+    color: colors.textMuted,
     marginTop: 4,
   },
 
   otpBox: {
-    marginTop: 16,
-    padding: 18,
-    borderRadius: 17,
-    backgroundColor: mfTheme.goldSoft,
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: "#fff8e1",
     borderWidth: 1,
-    borderColor: mfTheme.gold,
+    borderColor: "#e0b000",
     alignItems: "center",
   },
 
   otpLabel: {
-    fontSize: 13,
-    fontWeight: "900",
-    color: mfTheme.navy,
-    marginBottom: 7,
+    fontSize: 14,
+    fontWeight: "800",
+    color: colors.text,
+    marginBottom: spacing.sm,
   },
 
   otpCode: {
     fontSize: 38,
     fontWeight: "900",
     letterSpacing: 10,
-    color: mfTheme.goldDark,
-    marginVertical: 7,
+    color: colors.accent,
+    marginVertical: spacing.sm,
   },
 
   otpHint: {
-    fontSize: 12,
-    color: mfTheme.muted,
+    fontSize: 13,
+    color: colors.textMuted,
     textAlign: "center",
-    lineHeight: 18,
+    lineHeight: 19,
   },
 
   waitingBox: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: "#F7F3EA",
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
   },
 
   waitingTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: mfTheme.navy,
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.text,
   },
 
   waitingText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: mfTheme.muted,
-    lineHeight: 19,
+    marginTop: spacing.xs,
+    fontSize: 14,
+    color: colors.textMuted,
+    lineHeight: 20,
   },
 
   acceptedBox: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: mfTheme.goldSoft,
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
   },
 
   acceptedTitle: {
-    fontSize: 15,
-    fontWeight: "900",
-    color: mfTheme.goldDark,
+    fontSize: 16,
+    fontWeight: "800",
+    color: colors.accent,
   },
 
   acceptedText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: mfTheme.navy,
-    lineHeight: 19,
+    marginTop: spacing.xs,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
   },
 
   startedBox: {
-    marginTop: 16,
-    padding: 14,
-    borderRadius: 17,
-    backgroundColor: "#F7F3EA",
+    marginTop: spacing.lg,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
     borderWidth: 1,
-    borderColor: mfTheme.gold,
+    borderColor: colors.accent,
   },
 
   startedTitle: {
-    fontSize: 16,
-    fontWeight: "900",
-    color: mfTheme.goldDark,
+    fontSize: 17,
+    fontWeight: "800",
+    color: colors.accent,
   },
 
   startedText: {
-    marginTop: 4,
-    fontSize: 13,
-    color: mfTheme.navy,
-    lineHeight: 19,
+    marginTop: spacing.xs,
+    fontSize: 14,
+    color: colors.text,
+    lineHeight: 20,
   },
 
   cancelButton: {
-    backgroundColor: mfTheme.danger,
-    borderRadius: 17,
-    paddingVertical: 15,
+    backgroundColor: "#d9534f",
+    borderRadius: radius.md,
+    paddingVertical: spacing.md,
     alignItems: "center",
-    marginTop: 16,
+    marginTop: spacing.lg,
   },
 
   cancelButtonText: {
-    color: "#FFFFFF",
-    fontSize: 15,
-    fontWeight: "900",
+    color: "#fff",
+    fontSize: 16,
+    fontWeight: "700",
   },
 
   cancelledText: {
-    marginTop: 16,
+    marginTop: spacing.lg,
     textAlign: "center",
-    fontSize: 13,
-    color: mfTheme.muted,
+    fontSize: 14,
+    color: colors.textMuted,
   },
 
-  homeButton: {
-    backgroundColor: mfTheme.navy,
-    borderRadius: 17,
-    paddingVertical: 15,
+  aiCard: {
+    marginTop: spacing.xl,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.border,
+  },
+
+  aiHeaderRow: {
+    flexDirection: "row",
     alignItems: "center",
-    marginTop: 16,
+    justifyContent: "space-between",
+  },
+
+  aiTitleWrap: {
+    flexDirection: "row",
+    alignItems: "center",
+    flex: 1,
+  },
+
+  aiIcon: {
+    fontSize: 25,
+    marginRight: spacing.sm,
+  },
+
+  aiTitle: {
+    color: colors.text,
+    fontSize: 16,
+    fontWeight: "800",
+  },
+
+  aiSubtitle: {
+    color: colors.textMuted,
+    fontSize: 11,
+    marginTop: 2,
+  },
+
+  aiToggleButton: {
+    paddingHorizontal: spacing.sm,
+    paddingVertical: 7,
+    borderRadius: 999,
+    backgroundColor: colors.background,
+  },
+
+  aiToggleText: {
+    color: colors.accent,
+    fontSize: 12,
+    fontWeight: "800",
+  },
+
+  aiReplyBox: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+  },
+
+  aiReplyLabel: {
+    color: colors.accent,
+    fontSize: 11,
+    fontWeight: "900",
+    marginBottom: 4,
+  },
+
+  aiReplyText: {
+    color: colors.text,
+    fontSize: 14,
+    lineHeight: 21,
+  },
+
+  quickPromptRow: {
+    flexDirection: "row",
+    flexWrap: "wrap",
+    gap: 8,
+    marginTop: spacing.sm,
+  },
+
+  quickPromptButton: {
+    paddingHorizontal: 11,
+    paddingVertical: 8,
+    borderRadius: 999,
+    backgroundColor: "#fff8e1",
+    borderWidth: 1,
+    borderColor: "#e0b000",
+  },
+
+  quickPromptText: {
+    color: colors.text,
+    fontSize: 11,
+    fontWeight: "700",
+  },
+
+  aiInputRow: {
+    flexDirection: "row",
+    alignItems: "flex-end",
+    marginTop: spacing.sm,
+  },
+
+  aiInput: {
+    flex: 1,
+    minHeight: 45,
+    maxHeight: 90,
+    borderWidth: 1,
+    borderColor: colors.border,
+    borderRadius: radius.md,
+    paddingHorizontal: spacing.md,
+    paddingVertical: 10,
+    color: colors.text,
+    backgroundColor: colors.surface,
+    fontSize: 14,
+  },
+
+  aiSendButton: {
+    minHeight: 45,
+    marginLeft: spacing.sm,
+    paddingHorizontal: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.accent,
+    alignItems: "center",
+    justifyContent: "center",
+  },
+
+  aiSendText: {
+    color: "#fff",
+    fontSize: 13,
+    fontWeight: "800",
+  },
+
+  routeCard: {
+    marginTop: spacing.lg,
+    padding: spacing.lg,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
+    borderWidth: 1,
+    borderColor: colors.accent,
+  },
+
+  routeHeaderRow: {
+    flexDirection: "row",
+    alignItems: "center",
+    justifyContent: "space-between",
+  },
+
+  routeTitle: {
+    color: colors.text,
+    fontSize: 17,
+    fontWeight: "800",
+  },
+
+  routeBadge: {
+    color: colors.accent,
+    fontSize: 10,
+    fontWeight: "900",
+  },
+
+  routeLine: {
+    width: 24,
+    alignItems: "center",
+    marginTop: spacing.md,
+    marginBottom: spacing.sm,
+  },
+
+  routeDotStart: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.accent,
+  },
+
+  routeDashedLine: {
+    height: 34,
+    width: 2,
+    borderLeftWidth: 2,
+    borderLeftColor: colors.border,
+    borderStyle: "dashed",
+  },
+
+  routeDotEnd: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: colors.text,
+  },
+
+  routeTextBox: {
+    marginTop: -63,
+    marginLeft: 34,
+    marginBottom: spacing.md,
+  },
+
+  routeFrom: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  routeArrow: {
+    color: colors.textMuted,
+    fontSize: 16,
+    marginVertical: 3,
+  },
+
+  routeTo: {
+    color: colors.text,
+    fontSize: 13,
+    fontWeight: "700",
+  },
+
+  routeStatsRow: {
+    flexDirection: "row",
+    marginTop: spacing.md,
+    gap: spacing.sm,
+  },
+
+  routeStat: {
+    flex: 1,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+  },
+
+  routeStatValue: {
+    color: colors.text,
+    fontSize: 15,
+    fontWeight: "800",
+  },
+
+  routeStatLabel: {
+    color: colors.textMuted,
+    fontSize: 10,
+    marginTop: 3,
+  },
+
+  routeNote: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 17,
+    marginTop: spacing.md,
+  },
+
+  mapButton: {
+    marginTop: spacing.md,
+    paddingVertical: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: colors.background,
+    borderWidth: 1,
+    borderColor: colors.accent,
+    alignItems: "center",
+  },
+
+  mapButtonText: {
+    color: colors.accent,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  supportCard: {
+    marginTop: spacing.md,
+    padding: spacing.md,
+    borderRadius: radius.md,
+    backgroundColor: "#fff8e1",
+    borderWidth: 1,
+    borderColor: "#e0b000",
+    flexDirection: "row",
+    alignItems: "center",
+  },
+
+  supportIconCircle: {
+    width: 42,
+    height: 42,
+    borderRadius: 21,
+    alignItems: "center",
+    justifyContent: "center",
+    backgroundColor: "#ffe7a0",
+  },
+
+  supportIcon: {
+    fontSize: 20,
+    color: colors.text,
+  },
+
+  supportTextBox: {
+    flex: 1,
+    marginLeft: spacing.sm,
+  },
+
+  supportTitle: {
+    color: colors.text,
+    fontSize: 14,
+    fontWeight: "800",
+  },
+
+  supportText: {
+    color: colors.textMuted,
+    fontSize: 11,
+    lineHeight: 16,
+    marginTop: 2,
+  },
+
+  supportArrow: {
+    color: colors.accent,
+    fontSize: 28,
+    marginLeft: spacing.sm,
   },
 
   restoreBox: {
-    marginTop: 24,
-    padding: 24,
-    borderRadius: 22,
-    backgroundColor: mfTheme.white,
+    marginTop: spacing.xl,
+    padding: spacing.xl,
+    borderRadius: radius.md,
+    backgroundColor: colors.surface,
     borderWidth: 1,
-    borderColor: mfTheme.border,
+    borderColor: colors.border,
     alignItems: "center",
   },
 
   restoreTitle: {
-    marginTop: 14,
+    marginTop: spacing.md,
     fontSize: 18,
-    fontWeight: "900",
-    color: mfTheme.navy,
+    fontWeight: "800",
+    color: colors.text,
     textAlign: "center",
   },
 
   restoreText: {
-    marginTop: 8,
-    fontSize: 13,
-    color: mfTheme.muted,
+    marginTop: spacing.sm,
+    fontSize: 14,
+    color: colors.textMuted,
     textAlign: "center",
-    lineHeight: 19,
+    lineHeight: 20,
   },
 });

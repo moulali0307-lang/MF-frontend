@@ -23,6 +23,7 @@ interface HomeScreenProps {
   onTrain?: () => void;
   onMovies?: () => void;
   onRecharge?: () => void;
+  onJourney?: () => void;
 }
 
 const COLORS = {
@@ -60,6 +61,7 @@ export function HomeScreen({
   onTrain,
   onMovies,
   onRecharge,
+  onJourney,
 }: HomeScreenProps) {
   const { user } = useAuth();
 
@@ -732,6 +734,82 @@ export function HomeScreen({
 
         )}
 
+
+        {/* =====================================================
+            MF JOURNEY
+            AI-powered trip planning and journey path
+        ===================================================== */}
+        <Pressable
+          onPress={onJourney}
+          style={{
+            marginTop: 14,
+            minHeight: 118,
+            borderRadius: 22,
+            backgroundColor: "#FFF1C7",
+            borderWidth: 1,
+            borderColor: "#D7A42A",
+            padding: 16,
+            flexDirection: "row",
+            alignItems: "center",
+            justifyContent: "space-between",
+          }}
+        >
+          <View style={{ flex: 1, paddingRight: 12 }}>
+            <Text style={styles.cardLabel}>MF JOURNEY</Text>
+            <Text style={styles.cardTitle}>Plan your journey with AI</Text>
+            <Text style={styles.cardSub}>
+              Budget • Route • Stops • Travel plan
+            </Text>
+          </View>
+
+          <View
+            style={{
+              width: 52,
+              height: 52,
+              borderRadius: 26,
+              backgroundColor: COLORS.navy,
+              alignItems: "center",
+              justifyContent: "center",
+            }}
+          >
+            <Text style={{ color: COLORS.white, fontSize: 25, fontWeight: "900" }}>
+              →
+            </Text>
+          </View>
+        </Pressable>
+
+
+        <View
+          style={{
+            marginTop: 14,
+            padding: 16,
+            borderRadius: 22,
+            backgroundColor: COLORS.navy,
+          }}
+        >
+          <Text style={{ color: COLORS.gold, fontSize: 11, fontWeight: "900", letterSpacing: 1 }}>
+            MF 2030 TRAVEL AI
+          </Text>
+          <Text style={{ color: COLORS.white, fontSize: 20, fontWeight: "900", marginTop: 6 }}>
+            One app for every journey.
+          </Text>
+          <Text style={{ color: "#D6DCE8", fontSize: 13, lineHeight: 19, marginTop: 6 }}>
+            Plan trips, understand routes, manage budgets and get AI travel support from one place.
+          </Text>
+          <Pressable
+            onPress={onJourney}
+            style={{
+              alignSelf: "flex-start",
+              marginTop: 12,
+              paddingHorizontal: 14,
+              paddingVertical: 10,
+              borderRadius: 14,
+              backgroundColor: COLORS.gold,
+            }}
+          >
+            <Text style={{ color: COLORS.navy, fontWeight: "900" }}>Open Journey AI →</Text>
+          </Pressable>
+        </View>
 
         {/* =====================================================
             REWARDS

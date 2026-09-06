@@ -19,8 +19,9 @@ import { MoreServicesScreen } from "./src/screens/MoreServicesScreen";
 import { BusBookingScreen } from "./src/screens/BusBookingScreen";
 import { ProfileScreen } from "./src/screens/ProfileScreen";
 import { TrainBookingScreen } from "./src/screens/TrainBookingScreen";
-import  MovieBookingScreen  from "./src/screens/MovieBookingScreen";
+import MovieBookingScreen from "./src/screens/MovieBookingScreen";
 import { RechargeScreen } from "./src/screens/RechargeScreen";
+import JourneyScreen from "./src/screens/JourneyScreen";
 
 import { colors } from "./src/theme/colors";
 
@@ -37,7 +38,8 @@ type AppScreen =
   | "trainBooking"
   | "movieBooking"
   | "recharge"
-  | "profile";
+  | "profile"
+  | "journey";
 
 function RootNavigator() {
   const {
@@ -52,12 +54,6 @@ function RootNavigator() {
   const [appScreen, setAppScreen] =
     useState<AppScreen>("home");
 
-  /*
-   * --------------------------------------------------
-   * RESTORING LOGIN SESSION
-   * --------------------------------------------------
-   */
-
   if (isRestoring) {
     return (
       <View style={styles.loadingContainer}>
@@ -69,17 +65,7 @@ function RootNavigator() {
     );
   }
 
-  /*
-   * --------------------------------------------------
-   * LOGGED-IN APP
-   * --------------------------------------------------
-   */
-
   if (user) {
-
-    /*
-     * PROFILE
-     */
     if (appScreen === "profile") {
       return (
         <ProfileScreen
@@ -93,185 +79,103 @@ function RootNavigator() {
       );
     }
 
-    /*
-      * MORE SERVICES
-      */
-      if (appScreen === "moreServices") {
-        return (
-          <MoreServicesScreen
-            onBack={() => setAppScreen("home")}
+    if (appScreen === "journey") {
+      return (
+        <JourneyScreen
+          onBack={() => setAppScreen("home")}
+          onBookRide={() => setAppScreen("bookRide")}
+        />
+      );
+    }
 
-            onBus={() =>
-              setAppScreen("busBooking")
-            }
+    if (appScreen === "moreServices") {
+      return (
+        <MoreServicesScreen
+          onBack={() => setAppScreen("home")}
+          onBus={() => setAppScreen("busBooking")}
+          onTrain={() => setAppScreen("trainBooking")}
+          onMovies={() => setAppScreen("movieBooking")}
+          onRecharge={() => setAppScreen("recharge")}
+        />
+      );
+    }
 
-            onTrain={() =>
-              setAppScreen("trainBooking")
-            }
-
-            onMovies={() =>
-              setAppScreen("movieBooking")
-            }
-
-            onRecharge={() =>
-              setAppScreen("recharge")
-            }
-          />
-        );
-      }
-
-    /*
-     * BUS BOOKING
-     */
-    if (
-      appScreen === "busBooking"
-    ) {
+    if (appScreen === "busBooking") {
       return (
         <BusBookingScreen
-          onBack={() =>
-            setAppScreen("moreServices")
-          }
+          onBack={() => setAppScreen("moreServices")}
         />
       );
     }
 
-    /*
-     * BOOK RIDE
-     */
-    if (
-      appScreen === "bookRide"
-    ) {
+    if (appScreen === "bookRide") {
       return (
         <BookRideScreen
-          onBack={() =>
-            setAppScreen("home")
-          }
+          onBack={() => setAppScreen("home")}
         />
       );
     }
-    /*
-     * TRAIN BOOKING
-     */
+
     if (appScreen === "trainBooking") {
       return (
-         <TrainBookingScreen
-           onBack={() =>
-            setAppScreen("moreServices")
-          }
+        <TrainBookingScreen
+          onBack={() => setAppScreen("moreServices")}
         />
       );
     }
-    /*
-     * MOVIE BOOKING
-     */
-     if (appScreen === "movieBooking") {
-        return (
-          <MovieBookingScreen
-            onBack={() =>
-              setAppScreen("moreServices")
-            }
-          />
-        );
-      }
 
-      /*
-      * RECHARGE
-      */
-      if (appScreen === "recharge") {
-        return (
-          <RechargeScreen
-            onBack={() =>
-              setAppScreen("moreServices")
-            }
-          />
-        );
-      }
-    /*
-     * HOME
-     */
+    if (appScreen === "movieBooking") {
+      return (
+        <MovieBookingScreen
+          onBack={() => setAppScreen("moreServices")}
+        />
+      );
+    }
+
+    if (appScreen === "recharge") {
+      return (
+        <RechargeScreen
+          onBack={() => setAppScreen("moreServices")}
+        />
+      );
+    }
+
     return (
-       <HomeScreen
-          onBookRide={() =>
-            setAppScreen("bookRide")
-          }
-
-          onMoreServices={() =>
-            setAppScreen("moreServices")
-          }
-
-          onMenu={() =>
-            setAppScreen("profile")
-          }
-
-          onBus={() =>
-            setAppScreen("busBooking")
-          }
-
-          onTrain={() =>
-            setAppScreen("trainBooking")
-          }
-
-          onMovies={() =>
-            setAppScreen("movieBooking")
-          }
-
-          onRecharge={() =>
-            setAppScreen("recharge")
-          }
-        />
-      );
-    }
-
-  /*
-   * --------------------------------------------------
-   * LOGGED-OUT AUTH SCREENS
-   * --------------------------------------------------
-   */
+      <HomeScreen
+        onBookRide={() => setAppScreen("bookRide")}
+        onMoreServices={() => setAppScreen("moreServices")}
+        onMenu={() => setAppScreen("profile")}
+        onBus={() => setAppScreen("busBooking")}
+        onTrain={() => setAppScreen("trainBooking")}
+        onMovies={() => setAppScreen("movieBooking")}
+        onRecharge={() => setAppScreen("recharge")}
+        onJourney={() => setAppScreen("journey")}
+      />
+    );
+  }
 
   switch (authScreen) {
-
-    /*
-     * REGISTER
-     */
     case "register":
       return (
         <RegisterScreen
-          onGoToLogin={() =>
-            setAuthScreen("login")
-          }
+          onGoToLogin={() => setAuthScreen("login")}
         />
       );
 
-    /*
-     * LOGIN
-     */
     case "login":
       return (
         <LoginScreen
-          onGoToRegister={() =>
-            setAuthScreen("register")
-          }
-          onLoginSuccess={() => {
-            // AuthContext updates `user`.
-            // RootNavigator will automatically
-            // switch to HomeScreen.
-          }}
+          onGoToRegister={() => setAuthScreen("register")}
+          onLoginSuccess={() => {}}
         />
       );
 
-    /*
-     * WELCOME
-     */
     case "welcome":
     default:
       return (
         <WelcomeScreen
-          onGoToRegister={() =>
-            setAuthScreen("register")
-          }
-          onGoToLogin={() =>
-            setAuthScreen("login")
-          }
+          onGoToRegister={() => setAuthScreen("register")}
+          onGoToLogin={() => setAuthScreen("login")}
         />
       );
   }
